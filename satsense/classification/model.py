@@ -3,8 +3,10 @@ import numpy as np
 
 from satsense import SatelliteImage, extract_features
 from satsense.bands import MASK_BANDS, WORLDVIEW3
-from satsense.classification.cache import load_cache, cache
+from satsense.classification.cache import load_cache, cache, cached_model_exists, load_cached_model, cache_model
 from satsense.features import FeatureSet
+from satsense.features.lacunarity import Lacunarity
+from satsense.features.sift import Sift, sift_cluster
 from satsense.generators import CellGenerator
 
 
@@ -124,14 +126,23 @@ def balance_dataset(X: np.ndarray, y: np.ndarray, class_ratio=1.3):
     return X, y
 
 
-def create_feature_set(features, sat_image: SatelliteImage) -> FeatureSet:
-    pass
+def create_models(images, feature_set: FeatureSet, base_data_path, extension='tif', main_window_size=(30, 30),
+                  percentage_threshold=0.5, class_ratio=1.3, bands=WORLDVIEW3):
+    """
+    Yields models, a tuple of (X vector, y vector, real_mask image) for various images
+    Also yields a grouped model of all images for classification use
 
-
-def create_models(images, features, base_data_path, extension='tif', main_window_size=(30, 30), percentage_threshold=0.5, class_ratio=1.3, bands=WORLDVIEW3):
-
+    :param images:
+    :param feature_set:
+    :param base_data_path:
+    :param extension:
+    :param main_window_size:
+    :param percentage_threshold:
+    :param class_ratio:
+    :param bands:
+    """
     data = []
-    for image_name in images:
+    for group_num, image_name in enumerate(images):
         image_file = "{base_path}/{image_name}.{extension}".format(
             base_path=base_data_path,
             image_name=image_name,
@@ -141,29 +152,39 @@ def create_models(images, features, base_data_path, extension='tif', main_window
         mask_full_path = "{base_path}/{image_name}_masked.tif".format(base_path=base_data_path, image_name=image_name)
         sat_image = SatelliteImage.load_from_file(image_file, bands)
 
-        feature_set = create_feature_set(features, sat_image)
-
         X_image = get_x_matrix(sat_image, image_name=image_name, feature_set=feature_set, window_size=main_window_size,
-                         cached=True)
+                               cached=True)
         y_image, real_mask = get_y_vector(mask_full_path, main_window_size, percentage_threshold, cached=False)
         X, y = balance_dataset(X_image, y_image, class_ratio=class_ratio)
 
-        image_vars = (X_image, y_image, real_mask)
+        image_vars = (X_image, y_image, real_mask, np.full(y_image.shape, group_num))
         data.append(image_vars)
-        yield image_vars
+        # yield image_vars
 
     if len(data) > 1:
         group_num = 0
-        base_X, base_y, _ = data[0]
+        base_X, base_y, _, groups = data[0]
         groups = np.full(base_y.shape, group_num)
-        for X, y, _ in data[0+1:]:
-            group_num += 1
+        for X, y, _, im_groups in data[1:]:
 
             base_X = np.append(base_X, X)
             base_y = np.append(base_y, y)
-            groups = np.append(groups, np.full(base_y.shape, group_num))
+            groups = np.append(groups, im_groups)
 
-        yield (base_X, base_y, None)
+        yield (base_X, base_y, None, groups)
 
 
+def create_sift_feature(sat_image: SatelliteImage, window_sizes, image_name, n_clusters=32, cached=True) -> Sift:
+    cache_key = "kmeans-{}".format(image_name)
 
+    if cached and cached_model_exists(cache_key):
+        kmeans = load_cached_model(cache_key)
+        print("Loaded cached kmeans {}".format(cache_key))
+    else:
+        print("Computing k-means model")
+        kmeans = sift_cluster(sat_image, n_clusters=n_clusters)
+        cache_model(kmeans, cache_key)
+
+    feature = Sift(kmeans, windows=(window_sizes))
+
+    return feature
