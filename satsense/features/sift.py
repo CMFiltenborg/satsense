@@ -5,19 +5,18 @@ from satsense import SatelliteImage
 from .feature import Feature
 from sklearn.cluster import KMeans, MiniBatchKMeans
 from sklearn.preprocessing import MinMaxScaler
+from numba import jit
 
-def sift_cluster(sat_image: SatelliteImage, sample_size=100000) -> MiniBatchKMeans:
+def sift_cluster(sat_image: SatelliteImage, n_clusters=32, sample_size=100000) -> MiniBatchKMeans:
     sift = cv2.xfeatures2d.SIFT_create()
     kp, descriptors = sift.detectAndCompute(sat_image.gray_ubyte, None)
     del kp  # Free up memory
 
-
     # Sample {sample_size} descriptors from all descriptors
-    # (Takes random rows)
-    # and cluster these
+    # (Takes random rows) and cluster these
     X = descriptors[np.random.choice(descriptors.shape[0], sample_size, replace=False), :]
 
-    mbkmeans = MiniBatchKMeans(n_clusters=32, random_state=42).fit(X)
+    mbkmeans = MiniBatchKMeans(n_clusters=n_clusters, random_state=42).fit(X)
 
     return mbkmeans
 
@@ -51,15 +50,20 @@ class Sift(Feature):
         kp, descriptors = self.sift_obj.detectAndCompute(window_gray_ubyte, None)
         del kp  # Free up memory
 
-        histogram = np.zeros((32))
+
 
         # Is none if no descriptors are found, i.e. on 0 input range
         if descriptors is None:
-            return histogram
+            return np.zeros((32))
 
         codewords = kmeans.predict(descriptors)
+        return count_codewords(codewords, 32)
 
-        for codeword in codewords:
-            histogram[codeword] += 1
 
-        return histogram
+@jit('int32[:](int64[:], int64)', nopython=True)
+def count_codewords(codewords, vector_length):
+    histogram = np.zeros((vector_length), dtype=np.int32)
+    for codeword in codewords:
+        histogram[codeword] += 1
+
+    return histogram
