@@ -1,12 +1,8 @@
 import numpy as np
 import scipy as sp
-
 from skimage.feature import greycomatrix, greycoprops
-
 from .feature import Feature
-from .. import SatelliteImage
-from ..generators import CellGenerator
-
+import warnings
 
 def get_rii_dist_angles():
     """
@@ -83,10 +79,13 @@ def pantex(window, maximum=255):
     offsets = get_rii_dist_angles()
 
     pan = np.zeros(len(offsets))
-    for i, offset in enumerate(offsets):
-        glcm = greycomatrix(window, [offset[0]], [offset[1]], symmetric=True,
-                            normed=True, levels=maximum + 1)
-        pan[i] = greycoprops(glcm, 'contrast')
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', FutureWarning)
+        for i, offset in enumerate(offsets):
+            glcm = greycomatrix(window, [offset[0]], [offset[1]], symmetric=True,
+                                normed=True, levels=maximum + 1)
+            pan[i] = greycoprops(glcm, 'contrast')
 
     return pan.min()
 
