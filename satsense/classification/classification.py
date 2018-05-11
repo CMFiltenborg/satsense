@@ -1,33 +1,25 @@
 import itertools
-import time
 import math
-from sklearn.neighbors import KNeighborsClassifier
-from satsense import SatelliteImage, extract_features
+
+from satsense import SatelliteImage
 from satsense.classification.classifiers import knn_classifier
 from satsense.features import FeatureSet, Pantex
-from satsense.features.lacunarity import create_lacunarity, Lacunarity
-from satsense.features.sift import Sift, sift_cluster
-from satsense.generators import CellGenerator
-from satsense.bands import WORLDVIEW2, MASK_BANDS, WORLDVIEW3
+from satsense.features.lacunarity import Lacunarity
+from satsense.bands import WORLDVIEW3
 import numpy as np
-import gdal
-import os
-import sys
-import seaborn as sns
-import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import KFold
 from sklearn.model_selection import cross_validate
 from sklearn.metrics import confusion_matrix
-from sklearn.ensemble import RandomForestClassifier
-from satsense.classification.cache import cache, load_cache, cache_model, cached_model_exists, load_cached_model
+from satsense.classification.cache import get_project_root
 import json
 from time import gmtime, strftime
-from satsense.classification.model import get_x_matrix, get_y_vector, balance_dataset
+from satsense.classification.model import get_x_matrix, get_y_vector, balance_dataset, create_sift_feature, \
+    create_models
 from satsense.performance import jaccard_index_binary_masks
-
+from sklearn.model_selection import GroupKFold
+from sklearn.model_selection import LeaveOneGroupOut
 
 def plot_confusion_matrix(cm, classes,
                           normalize=False,
@@ -85,22 +77,6 @@ def plots(cnf_matrix, results_path, current_time, show=True):
         plt.show()
 
 
-def create_sift_feature(sat_image: SatelliteImage, window_sizes, image_name, n_clusters=32, cached=True) -> Sift:
-    cache_key = "kmeans-{}".format(image_name)
-
-    if cached and cached_model_exists(cache_key):
-        kmeans = load_cached_model(cache_key)
-        print("Loaded cached kmeans {}".format(cache_key))
-    else:
-        print("Computing k-means model")
-        kmeans = sift_cluster(sat_image, n_clusters=n_clusters)
-        cache_model(kmeans, cache_key)
-
-    feature = Sift(kmeans, windows=(window_sizes))
-
-    return feature
-
-
 def save_classification_results(results):
     with open(results['save_path'], 'w') as fp:
         json.dump(results, fp, indent=4)
@@ -114,11 +90,11 @@ class_names = {
 }
 images = [
     'section_1',
-    # 'section_2',
-    # 'section_3',
+    'section_2',
+    'section_3',
 ]
 show_plots = True
-results_path = "/home/max/Documents/ai/scriptie/satsense/results"
+results_path = '{root}/results'.format(root=get_project_root())
 current_time = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
 base_path = "/home/max/Documents/ai/scriptie/data/Clip"
 extension = 'tif'
@@ -128,7 +104,6 @@ test_size = 0.2
 class_ratio = 1.3
 feature_set = FeatureSet()
 pantex = Pantex(pantex_window_sizes)
-full_test = False
 
 for image_name in images:
     image_file = "{base_path}/{image_name}.{extension}".format(
@@ -148,11 +123,10 @@ for image_name in images:
     # lacunarity = create_lacunarity(sat_image, image_name, windows=((25, 25),), cached=True)
     lacunarity = Lacunarity(windows=((10, 10), (20, 20), (30, 30)))
     feature_set.add(lacunarity, "LACUNARITY")
-    # feature_set.add(pantex, "PANTEX")
-    # feature_set.add(sift, "SIFT")
+    feature_set.add(pantex, "PANTEX")
+    feature_set.add(sift, "SIFT")
 
     classifier = knn_classifier()
-
 
     # del sat_image  # Free-up memory
 
@@ -161,12 +135,16 @@ for image_name in images:
     y, real_mask = get_y_vector(mask_full_path, main_window_size, percentage_threshold, cached=False)
     X, y = balance_dataset(X, y, class_ratio=class_ratio)
 
+
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42, stratify=None)
 
     classifier.fit(X_train, y_train)
     y_pred = classifier.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
-    cv_results = cross_validate(classifier, X, y, return_train_score=True, cv=10)
+
+    X, y, real_mask, groups = create_models(images, feature_set, base_path, main_window_size=main_window_size, percentage_threshold=percentage_threshold, class_ratio=class_ratio, bands=bands)
+    cv_results = cross_validate(classifier, X=X, y=y, groups=groups, return_train_score=True,  cv=LeaveOneGroupOut(), n_jobs=-1)
+
     jaccard_score = jaccard_index_binary_masks(y_test, y_pred)
     print("Accuracy: {}".format(accuracy))
     print("Cross validation: ", cv_results)
@@ -175,15 +153,15 @@ for image_name in images:
     cnf_matrix = confusion_matrix(y_test, y_pred)
     plots(cnf_matrix, show=show_plots, current_time=current_time, results_path=results_path)
 
-    # x_length = math.ceil(sat_image.shape[0] / main_window_size[0])
-    # y_length = math.ceil(sat_image.shape[1] / main_window_size[0])
-    # feature_mask_shape = (x_length, y_length)
+    x_length = math.ceil(sat_image.shape[0] / main_window_size[0])
+    y_length = math.ceil(sat_image.shape[1] / main_window_size[0])
+    feature_mask_shape = (x_length, y_length)
 
-    # y_real_mask = y.reshape(feature_mask_shape)
-    # y_pred_mask = y_pred.reshape(feature_mask_shape)
+    y_real_mask = y.reshape(feature_mask_shape)
+    y_pred_mask = y_pred.reshape(feature_mask_shape)
 
     result_information = {
-        'satellite_image': image_name,
+        'base_satellite_image': image_name,
         'classifier': str(classifier),
         'results': {
             'accuracy': accuracy,
