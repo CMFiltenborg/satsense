@@ -17,7 +17,7 @@ from scipy import stats, integrate
 
 sns.set(color_codes=True)
 
-feature_window_sizes = [(3, 3), (10, 10), (25, 25), (50, 50), (100, 100), (200, 200), (300, 300)]
+feature_window_sizes = [(25, 25), (50, 50), (100, 100), (200, 200), (300, 300)]
 # feature_window_sizes = [(100, 100), (200, 200), (300, 300)]
 feature_name = 'lacunarity'
 
@@ -40,6 +40,7 @@ def plot_boxplot(X, y, image_name, plot_title, feature_name="pantex"):
     df['y'] = df['y'].map(lambda x: "Slum" if x == 1 else "Non-slum")
     sns.boxplot(x='y', y='X', data=df)
 
+    plt.figure()
     plt.title(plot_title)
     if balanced:
         plt.savefig(results_path + "/{feature_name}/boxplot_balanced_{image_name}_{plot_title}.png".format(
@@ -79,6 +80,7 @@ def plot_distribution(X, y, image_name, plot_title, feature_name):
     y_ones = y[y == 1]
     df = pd.DataFrame({'Slum': X_ones.flatten(), 'Non-slum': X_zeros.flatten()})
 
+    plt.figure()
     plt.title(plot_title)
     for col in ['Slum', 'Non-slum']:
         # sns.distplot(df[col], ax=axes[ax_pos])
@@ -92,7 +94,7 @@ def plot_distribution(X, y, image_name, plot_title, feature_name):
     # ax.set(xlabel='common xlabel', ylabel='common ylabel')
     plt.show()
 
-f, axes = plt.subplots(len(images), len(feature_window_sizes), sharex='col', sharey='row', figsize=(15, 15))
+# f, axes = plt.subplots(len(images), len(feature_window_sizes), sharex='col', sharey='row', figsize=(15, 15))
 for i, image_name in enumerate(images):
     image_file = "{base_path}/{image_name}.{extension}".format(
         base_path=base_path,
@@ -115,7 +117,7 @@ for i, image_name in enumerate(images):
             # pantex = Pantex(feature_sizes)
             # feature_set.add(pantex, "PANTEX")
 
-            X = get_x_matrix(sat_image=sat_image, feature_set=feature_set, window_size=main_window_size, cached=True,
+            X = get_x_matrix(sat_image=sat_image, feature_set=feature_set, window_size=main_window_size, cached=False,
                              image_name=image_name)
             y, _ = get_y_vector(mask_full_path, main_window_size, percentage_threshold=0.5, cached=False)
             if balanced:
@@ -125,7 +127,7 @@ for i, image_name in enumerate(images):
             print('y[0s]: {}'.format(len(y[y == 0])))
 
             plot_boxplot(X, y, image_name, plot_title=plot_title, feature_name=feature_name)
-            plot_distribution_subplots(X, y, image_name, (i, j))
+            # plot_distribution_subplots(X, y, image_name, (i, j))
             plot_distribution(X, y, image_name, plot_title, feature_name=feature_name)
 
 plot_title = 'Lacunarity'
