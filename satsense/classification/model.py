@@ -152,12 +152,12 @@ def create_models(images, feature_set: FeatureSet, base_data_path, extension='ti
         mask_full_path = "{base_path}/{image_name}_masked.tif".format(base_path=base_data_path, image_name=image_name)
         sat_image = SatelliteImage.load_from_file(image_file, bands)
 
-        X_image = get_x_matrix(sat_image, image_name=image_name, feature_set=feature_set, window_size=main_window_size,
-                               cached=True)
-        y_image, real_mask = get_y_vector(mask_full_path, main_window_size, percentage_threshold, cached=False)
-        X, y = balance_dataset(X_image, y_image, class_ratio=class_ratio)
+        X = get_x_matrix(sat_image, image_name=image_name, feature_set=feature_set, window_size=main_window_size,
+                         cached=False)
+        y, real_mask = get_y_vector(mask_full_path, main_window_size, percentage_threshold, cached=False)
+        X, y = balance_dataset(X, y, class_ratio=class_ratio)
 
-        image_vars = (X_image, y_image, real_mask, np.full(y_image.shape, group_num))
+        image_vars = (X, y, real_mask, np.full(y.shape, group_num))
         data.append(image_vars)
         # yield image_vars
 
@@ -171,7 +171,7 @@ def create_models(images, feature_set: FeatureSet, base_data_path, extension='ti
             base_y = np.append(base_y, y)
             groups = np.append(groups, im_groups)
 
-        yield (base_X, base_y, None, groups)
+        return (base_X, base_y, None, groups)
 
 
 def create_sift_feature(sat_image: SatelliteImage, window_sizes, image_name, n_clusters=32, cached=True) -> Sift:
