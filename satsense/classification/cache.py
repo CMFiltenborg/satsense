@@ -7,7 +7,8 @@ from satsense.features import FeatureSet
 
 
 def get_project_root():
-    project_root = "../.."
+    path = os.path.dirname(os.path.realpath(__file__))
+    project_root = "{}/../..".format(path)
     return project_root
 
 
@@ -77,10 +78,13 @@ def load_feature_cache(features: FeatureSet, image_name: str, window_size: (int,
             cache_key=feature_cache_key
         )
 
-        if os.path.isfile(full_path):
-            npzdict = np.load(full_path)
-            cached[name] = npzdict
-        else:
+        try:
+            if os.path.isfile(full_path):
+                npzdict = np.load(full_path)
+                cached[name] = npzdict
+            else:
+                cached[name] = {}
+        except OSError:
             cached[name] = {}
 
     return cached
