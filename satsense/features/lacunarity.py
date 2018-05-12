@@ -66,7 +66,7 @@ def lacunarity(edged_image, box_size):
 
 
 class Lacunarity(Feature):
-    def __init__(self, windows=((25, 25),), box_sizes=(2, 4, 6)):
+    def __init__(self, windows=((25, 25),), box_sizes=(10, 20, 30)):
         super(Lacunarity, self)
         self.box_sizes = box_sizes
         self.windows = windows
