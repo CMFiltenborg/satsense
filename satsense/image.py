@@ -173,9 +173,14 @@ class Window(Image):
 
 
 class SatelliteImage(Image):
-    def __init__(self, dataset, array, bands):
+    def __init__(self, dataset, array, bands, image_name=''):
         super(SatelliteImage, self).__init__(array, bands)
         self.__dataset = dataset
+        self.__name = image_name
+
+    @property
+    def name(self):
+        return self.__name
 
     @staticmethod
     def load_from_file(path, bands):
