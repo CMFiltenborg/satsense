@@ -148,12 +148,11 @@ def create_models(images, feature_set: FeatureSet, base_data_path, extension='ti
             image_name=image_name,
             extension=extension
         )
-        bands = WORLDVIEW3
         mask_full_path = "{base_path}/{image_name}_masked.tif".format(base_path=base_data_path, image_name=image_name)
         sat_image = SatelliteImage.load_from_file(image_file, bands)
 
         X = get_x_matrix(sat_image, image_name=image_name, feature_set=feature_set, window_size=main_window_size,
-                         cached=False)
+                         cached=True)
         y, real_mask = get_y_vector(mask_full_path, main_window_size, percentage_threshold, cached=False)
         X, y = balance_dataset(X, y, class_ratio=class_ratio)
 
@@ -167,9 +166,9 @@ def create_models(images, feature_set: FeatureSet, base_data_path, extension='ti
         groups = np.full(base_y.shape, group_num)
         for X, y, _, im_groups in data[1:]:
 
-            base_X = np.append(base_X, X)
-            base_y = np.append(base_y, y)
-            groups = np.append(groups, im_groups)
+            base_X = np.append(base_X, X, axis=0)
+            base_y = np.append(base_y, y, axis=0)
+            groups = np.append(groups, im_groups, axis=0)
 
         return (base_X, base_y, None, groups)
 
