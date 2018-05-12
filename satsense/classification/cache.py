@@ -13,7 +13,7 @@ def get_project_root():
 
 
 def cache_model(model, filename):
-    dir_path = "{root}/cache/".format(
+    dir_path = "{root}/cache".format(
         root=get_project_root(),
     )
 
@@ -50,7 +50,11 @@ def load_cached_model(filename: str):
 
 
 def cache(array, filename):
-    np.save(get_project_root() + "/cache/" + filename + ".npy", array)
+    dir_path = cache_path()
+    if not os.path.isdir(dir_path):
+        os.mkdir(dir_path)
+
+    np.save(dir_path + '/' + filename + ".npy", array)
 
 
 def load_cache(filename):
@@ -130,6 +134,11 @@ def cache_calculated_features(features, image_name, to_cache, window_size):
 
         arrays = to_cache[name]
         np.savez(full_path, **arrays)
+
+
+def cache_path():
+    cache_path = get_project_root() + "/cache"
+    return cache_path
 
 
 def cache_file_exists(cache_key):
