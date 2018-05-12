@@ -13,8 +13,15 @@ def get_project_root():
 
 
 def cache_model(model, filename):
-    full_path = "{root}/cache/{file}.pkl".format(
+    dir_path = "{root}/cache/".format(
         root=get_project_root(),
+    )
+
+    if not os.path.isdir(dir_path):
+        os.mkdir(dir_path)
+
+    full_path = "{dir_path}/{file}.pkl".format(
+        dir_path=dir_path,
         file=filename,
     )
 
