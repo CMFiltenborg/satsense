@@ -110,9 +110,12 @@ for image_name in images:
 
     dataset = gdal.Open(mask_full_path, gdal.GA_ReadOnly)
     array = dataset.ReadAsArray()
+    array = np.min(array, 0)
+    array = array[:, :, np.newaxis]
+    print(array.shape)
     binary_sat_image = SatelliteImage(dataset, array, MASK_BANDS)
     generator = CellGenerator(image=binary_sat_image, size=main_window_size)
-    X.reshape(generator.shape)
+    X.reshape(generator.shape())
 
     plt.figure()
     sns.heatmap(X)
