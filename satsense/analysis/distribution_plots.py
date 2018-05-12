@@ -92,7 +92,7 @@ def plot_distribution(X, y, image_name, plot_title, feature_name):
     # ax.set(xlabel='common xlabel', ylabel='common ylabel')
     plt.show()
 
-# f, axes = plt.subplots(len(images), len(feature_window_sizes), sharex='col', sharey='row', figsize=(15, 15))
+f, axes = plt.subplots(len(images), len(feature_window_sizes), sharex='col', sharey='row', figsize=(15, 15))
 for i, image_name in enumerate(images):
     image_file = "{base_path}/{image_name}.{extension}".format(
         base_path=base_path,
@@ -104,28 +104,29 @@ for i, image_name in enumerate(images):
     sat_image_shape = sat_image.shape
 
     for j, window_size in enumerate(feature_window_sizes):
-        # plot_title = 'GLCM PanTex with window {}'.format(window_size)
-        plot_title = 'Lacunarity with window {}'.format(window_size)
-        feature_set = FeatureSet()
-        feature_sizes = (window_size,)
-        lacunarity = Lacunarity(feature_sizes)
-        feature_set.add(lacunarity)
+        for box_size in (10, 20, 30):
+            # plot_title = 'GLCM PanTex with window {}'.format(window_size)
+            plot_title = 'Lacunarity with window {} with box_size {}'.format(window_size, box_size)
+            feature_set = FeatureSet()
+            feature_sizes = (window_size,)
+            lacunarity = Lacunarity(feature_sizes, (box_size,))
+            feature_set.add(lacunarity)
 
-        # pantex = Pantex(feature_sizes)
-        # feature_set.add(pantex, "PANTEX")
+            # pantex = Pantex(feature_sizes)
+            # feature_set.add(pantex, "PANTEX")
 
-        X = get_x_matrix(sat_image=sat_image, feature_set=feature_set, window_size=main_window_size, cached=True,
-                         image_name=image_name)
-        y, _ = get_y_vector(mask_full_path, main_window_size, percentage_threshold=0.5, cached=False)
-        if balanced:
-            X, y = balance_dataset(X, y, class_ratio=class_ratio)
+            X = get_x_matrix(sat_image=sat_image, feature_set=feature_set, window_size=main_window_size, cached=True,
+                             image_name=image_name)
+            y, _ = get_y_vector(mask_full_path, main_window_size, percentage_threshold=0.5, cached=False)
+            if balanced:
+                X, y = balance_dataset(X, y, class_ratio=class_ratio)
 
-        print('y[1s]: {}'.format(len(y[y == 1])))
-        print('y[0s]: {}'.format(len(y[y == 0])))
+            print('y[1s]: {}'.format(len(y[y == 1])))
+            print('y[0s]: {}'.format(len(y[y == 0])))
 
-        plot_boxplot(X, y, image_name, plot_title=plot_title, feature_name=feature_name)
-        # plot_distribution_subplots(X, y, image_name, (i, j))
-        plot_distribution(X, y, image_name, plot_title, feature_name=feature_name)
+            plot_boxplot(X, y, image_name, plot_title=plot_title, feature_name=feature_name)
+            plot_distribution_subplots(X, y, image_name, (i, j))
+            plot_distribution(X, y, image_name, plot_title, feature_name=feature_name)
 
 plot_title = 'Lacunarity'
 plt.savefig(results_path + "/{feature_name}/distribution_{plot_title}.png".format(
