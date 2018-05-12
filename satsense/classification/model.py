@@ -156,6 +156,7 @@ def create_models(images, feature_set: FeatureSet, base_data_path, extension='ti
         y, real_mask = get_y_vector(mask_full_path, main_window_size, percentage_threshold, cached=False)
         X, y = balance_dataset(X, y, class_ratio=class_ratio)
 
+        print("X shape {}, y shape {}".format(X.shape, y.shape))
         image_vars = (X, y, real_mask, np.full(y.shape, group_num))
         data.append(image_vars)
         # yield image_vars
@@ -164,6 +165,7 @@ def create_models(images, feature_set: FeatureSet, base_data_path, extension='ti
         group_num = 0
         base_X, base_y, _, groups = data[0]
         groups = np.full(base_y.shape, group_num)
+        print("X shape {}, y shape {}".format(base_X.shape, base_y.shape))
         for X, y, _, im_groups in data[1:]:
 
             base_X = np.append(base_X, X, axis=0)
