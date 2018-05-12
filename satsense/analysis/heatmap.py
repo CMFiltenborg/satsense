@@ -2,7 +2,7 @@ import itertools
 import math
 
 import gdal
-
+import seaborn as sns
 from satsense import SatelliteImage
 from satsense.classification.classifiers import knn_classifier, RF_classifier
 from satsense.features import FeatureSet, Pantex
@@ -87,7 +87,7 @@ for image_name in images:
     #                            cached=True)
 
     # lacunarity = create_lacunarity(sat_image, image_name, windows=((25, 25),), cached=True)
-    lacunarity = Lacunarity(windows=((100, 100), (200, 200), (300, 300)))
+    lacunarity = Lacunarity(windows=((200, 200)))
     feature_set.add(lacunarity, "LACUNARITY")
     # feature_set.add(pantex, "PANTEX")
     # feature_set.add(sift, "SIFT")
@@ -104,20 +104,24 @@ for image_name in images:
     ds, img, bands = load_from_file(image_file, WORLDVIEW3)
     img = normalize_image(img, bands)
     rgb_img = get_rgb_bands(img, bands)
-
     plt.imshow(rgb_img)
+    plt.savefig(results_path + "/lacunarity_heatmap_image.png".format())
 
-    binary_mask = X
-    show_mask = np.ma.masked_where(binary_mask == 0, binary_mask)
-    plt.imshow(show_mask[:, :, 0], cmap='jet', interpolation='none', alpha=0.7)
-    plt.title('Binary mask')
-    plt.show()
-    print('Min {} Max {}'.format(binary_mask.min(), binary_mask.max()))
-    print('Len > 0: {}'.format(len(binary_mask[binary_mask > 0])))
-    print('Len == 0: {}'.format(len(binary_mask[binary_mask == 0])))
+    plt.figure()
+    sns.heatmap(X)
+    plt.savefig(results_path + "/lacunarity_heatmap.png".format())
 
-    jaccard_index = jaccard_index_binary_masks(truth_mask[:, :, 0], binary_mask[:, :, 0])
-    print("Jaccard index: {}".format(jaccard_index))
+    # binary_mask = X
+    # show_mask = np.ma.masked_where(binary_mask == 0, binary_mask)
+    # plt.imshow(show_mask[:, :, 0], cmap='jet', interpolation='none', alpha=0.7)
+    # plt.title('Binary mask')
+    # plt.show()
+    # print('Min {} Max {}'.format(binary_mask.min(), binary_mask.max()))
+    # print('Len > 0: {}'.format(len(binary_mask[binary_mask > 0])))
+    # print('Len == 0: {}'.format(len(binary_mask[binary_mask == 0])))
+
+    # jaccard_index = jaccard_index_binary_masks(truth_mask[:, :, 0], binary_mask[:, :, 0])
+    # print("Jaccard index: {}".format(jaccard_index))
 
 
 
