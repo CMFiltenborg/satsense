@@ -1,8 +1,9 @@
 import itertools
 import math
 
+import gdal
+
 from satsense import SatelliteImage
-from satsense.analysis.plot import load_from_file
 from satsense.classification.classifiers import knn_classifier, RF_classifier
 from satsense.features import FeatureSet, Pantex
 from satsense.features.lacunarity import Lacunarity
@@ -23,6 +24,28 @@ from satsense.performance import jaccard_index_binary_masks
 from sklearn.model_selection import GroupKFold
 from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.model_selection import validation_curve
+
+
+def load_from_file(path, bands):
+    """
+    Loads the specified path from file and loads the bands into a numpy array
+    @returns dataset The raw gdal dataset
+            image The image loaded as a numpy array
+    """
+    dataset = gdal.Open(path, gdal.GA_ReadOnly)
+    array = dataset.ReadAsArray()
+
+    if len(array.shape) == 3:
+        # The bands column is in the first position, but we want it last
+        array = np.rollaxis(array, 0, 3)
+    elif len(array.shape) == 2:
+        # This image seems to have one band, so we add an axis for ease
+        # of use in the rest of the library
+        array = array[:, :, np.newaxis]
+
+    image = array.astype('float32')
+
+    return dataset, image, bands
 
 
 n_clusters = 32
