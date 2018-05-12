@@ -7,7 +7,7 @@ from satsense import SatelliteImage
 from satsense.classification.classifiers import knn_classifier, RF_classifier
 from satsense.features import FeatureSet, Pantex
 from satsense.features.lacunarity import Lacunarity
-from satsense.bands import WORLDVIEW3
+from satsense.bands import WORLDVIEW3, MASK_BANDS
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split, learning_curve
@@ -19,6 +19,7 @@ import json
 from time import gmtime, strftime
 from satsense.classification.model import get_x_matrix, get_y_vector, balance_dataset, create_sift_feature, \
     create_models
+from satsense.generators import CellGenerator
 from satsense.image import normalize_image, get_rgb_bands
 from satsense.performance import jaccard_index_binary_masks
 from sklearn.model_selection import GroupKFold
@@ -87,7 +88,7 @@ for image_name in images:
     #                            cached=True)
 
     # lacunarity = create_lacunarity(sat_image, image_name, windows=((25, 25),), cached=True)
-    lacunarity = Lacunarity(windows=((200, 200)))
+    lacunarity = Lacunarity(windows=((200, 200),))
     feature_set.add(lacunarity, "LACUNARITY")
     # feature_set.add(pantex, "PANTEX")
     # feature_set.add(sift, "SIFT")
@@ -106,6 +107,12 @@ for image_name in images:
     rgb_img = get_rgb_bands(img, bands)
     plt.imshow(rgb_img)
     plt.savefig(results_path + "/lacunarity_heatmap_image.png".format())
+
+    dataset = gdal.Open(mask_full_path, gdal.GA_ReadOnly)
+    array = dataset.ReadAsArray()
+    binary_sat_image = SatelliteImage(dataset, array, MASK_BANDS)
+    generator = CellGenerator(image=binary_sat_image, size=main_window_size)
+    X.reshape(generator.shape)
 
     plt.figure()
     sns.heatmap(X)
