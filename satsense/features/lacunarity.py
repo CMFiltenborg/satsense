@@ -1,4 +1,12 @@
-from satsense import SatelliteImage, WORLDVIEW3, extract_features
+import cv2
+
+import matplotlib.pyplot as plt
+from skimage import img_as_ubyte
+from skimage.filters import rank
+import skimage.morphology as morp
+from skimage.transform import pyramid_reduce, pyramid_expand
+
+from satsense import SatelliteImage, WORLDVIEW3, extract_features, RGB
 from satsense.features import Feature, FeatureSet
 import numpy as np
 import scipy as sp
@@ -8,46 +16,19 @@ from numba import jit, prange
 import time
 
 from satsense.generators import CellGenerator
-
-
-def create_lacunarity(sat_image: SatelliteImage, image_name, windows=((25, 25)), cached=True):
-    edged = sat_image.canny_edged
-
-    # t0 = time.time()
-    # mean, variance = calculate_lacunarity_stats_nb(edged, 2)
-    # t1 = time.time()
-    # total = t1 - t0
-    # print("Numba version took {}".format(total))
-    #
-    # t0 = time.time()
-    # mean, variance = calculate_lacunarity_stats(edged, 2)
-    # t1 = time.time()
-    # total = t1 - t0
-    # print("Non-numba version took {}".format(total))
-
-    return Lacunarity(windows=windows)
-
-
-def lacunarity_python(edged_image, box_size):
-    # accumulator holds the amount of ones for each position in the image, defined by a sliding window
-    #
-    accumulator = np.zeros(edged_image.shape)
-    for i in range(edged_image.shape[0] - box_size):
-        for j in range(edged_image.shape[1] - box_size):
-            # sum the binary-box for the amount of 1s in this box
-            # box = edged_image[j:j + box_size, j: j + box_size]
-            accumulator[i, j] = np.sum(edged_image[j:j + box_size, i: i + box_size])
-
-    accumulator = accumulator.flatten()
-    mean = np.mean(accumulator)
-    if mean == 0:
-        return 0.0
-
-    return np.var(accumulator) / mean ** 2 + 1
+from satsense.image import get_grayscale_image, get_rgb_bands
 
 
 @jit("float64(boolean[:, :], int64)", nopython=True, parallel=True)
 def lacunarity(edged_image, box_size):
+    """
+    Calculate the lacunarity value over an image, following these papers:
+
+    Kit, Oleksandr, and Matthias Lüdeke. "Automated detection of slum area change in Hyderabad, India using multitemporal satellite imagery." ISPRS journal of photogrammetry and remote sensing 83 (2013): 130-137.
+
+    Kit, Oleksandr, Matthias Lüdeke, and Diana Reckien. "Texture-based identification of urban slums in Hyderabad, India using remote sensing data." Applied Geography 32.2 (2012): 660-667.
+    """
+
     # accumulator holds the amount of ones for each position in the image, defined by a sliding window
     #
     accumulator = np.zeros(edged_image.shape)
@@ -58,11 +39,11 @@ def lacunarity(edged_image, box_size):
             accumulator[i, j] = np.sum(edged_image[j:j + box_size, i: i + box_size])
 
     accumulator = accumulator.flatten()
-    mean = np.mean(accumulator)
-    if mean == 0:
+    mean_sqrd = np.mean(accumulator) ** 2
+    if mean_sqrd == 0:
         return 0.0
 
-    return np.var(accumulator) / mean ** 2 + 1
+    return (np.var(accumulator) / mean_sqrd) + 1
 
 
 class Lacunarity(Feature):
@@ -86,48 +67,5 @@ class Lacunarity(Feature):
 
         return result
 
-
-def test_numba_performance(benchmark):
-    print("????")
-    base_path = "/home/max/Documents/ai/scriptie/data/Clip"
-    image_name = 'section_1'
-    extension = 'tif'
-    image_file = "{base_path}/{image_name}.{extension}".format(
-        base_path=base_path,
-        image_name=image_name,
-        extension=extension
-    )
-    bands = WORLDVIEW3
-    sat_image = SatelliteImage.load_from_file(image_file, bands)
-    generator = CellGenerator(image=sat_image, size=(25, 25))
-
-    edged = sat_image.canny_edged
-    # benchmark(lacunarity, *(edged, 2))
-    benchmark(run_lacunarity, generator)
-
-
-def run_lacunarity(generator):
-    lacunarity = Lacunarity(windows=((100, 100),), box_sizes=(2, 4, 6))
-    feature_set = FeatureSet()
-    feature_set.add(lacunarity, name="LACUNARITY")
-    extract_features(feature_set, generator, False, 'section_1')
-
-    # for window in generator:
-    #     feature_array = lacunarity(window)
-
-def test_python_performance(benchmark):
-    print("????")
-    base_path = "/home/max/Documents/ai/scriptie/data/Clip"
-    image_name = 'section_1'
-    extension = 'tif'
-    image_file = "{base_path}/{image_name}.{extension}".format(
-        base_path=base_path,
-        image_name=image_name,
-        extension=extension
-    )
-    bands = WORLDVIEW3
-    sat_image = SatelliteImage.load_from_file(image_file, bands)
-
-    edged = sat_image.canny_edged
-    benchmark(lacunarity_python, *(edged, 2))
-
+    def __str__(self):
+        return "Lacunarity-{}-{}".format(str(self.windows), str(self.box_sizes))

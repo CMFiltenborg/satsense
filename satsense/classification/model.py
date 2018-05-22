@@ -1,11 +1,14 @@
+import itertools
+
 import gdal
 import numpy as np
 
 from satsense import SatelliteImage, extract_features
 from satsense.bands import MASK_BANDS, WORLDVIEW3
-from satsense.classification.cache import load_cache, cache, cached_model_exists, load_cached_model, cache_model
+from satsense.classification.classifiers import all_classifiers
+from satsense.features.texton import Texton, texton_cluster
+from satsense.util.cache import load_cache, cache, cached_model_exists, load_cached_model, cache_model
 from satsense.features import FeatureSet
-from satsense.features.lacunarity import Lacunarity
 from satsense.features.sift import Sift, sift_cluster
 from satsense.generators import CellGenerator
 
@@ -81,7 +84,7 @@ def get_x_matrix(sat_image: SatelliteImage, image_name, feature_set, window_size
     # Calculates Z features, resulting dimensions is:
     # [M x N x Z], where 0,0,: are the features of the first block
     # In this case we have 1 feature per block
-    calculated_features = extract_features(feature_set, generator, image_name=image_name)
+    calculated_features = extract_features(feature_set, generator, image_name=image_name, load_cached=cached)
 
     if len(calculated_features.shape) == 3:
         nrows = calculated_features.shape[0] * calculated_features.shape[1]
@@ -176,7 +179,7 @@ def create_models(images, feature_set: FeatureSet, base_data_path, extension='ti
 
 
 def create_sift_feature(sat_image: SatelliteImage, window_sizes, image_name, n_clusters=32, cached=True) -> Sift:
-    cache_key = "kmeans-{}".format(image_name)
+    cache_key = "kmeans-sift-{}".format(image_name)
 
     if cached and cached_model_exists(cache_key):
         kmeans = load_cached_model(cache_key)
@@ -189,3 +192,52 @@ def create_sift_feature(sat_image: SatelliteImage, window_sizes, image_name, n_c
     feature = Sift(kmeans, windows=(window_sizes))
 
     return feature
+
+def create_texton_feature(sat_image: SatelliteImage, window_sizes, image_name, n_clusters=32, cached=True) -> Texton:
+    cache_key = "kmeans-texton-{}".format(image_name)
+
+    if cached and cached_model_exists(cache_key):
+        kmeans = load_cached_model(cache_key)
+        print("Loaded cached kmeans {}".format(cache_key))
+    else:
+        print("Computing k-means model")
+        kmeans = texton_cluster([sat_image], n_clusters=n_clusters)
+        cache_model(kmeans, cache_key)
+
+    feature = Texton(kmeans, windows=(window_sizes))
+
+    return feature
+
+
+def generate_tests(features, classifiers=None):
+    if classifiers is None:
+        classifiers = all_classifiers()
+
+    for cl in classifiers:
+        for fs in generate_feature_sets(features):
+            yield (fs, cl)
+
+
+def generate_feature_sets(features):
+    """
+    Yields all possible combinations of features, of size 1 - len(features)
+    :param features:
+    """
+    combi_sizes = reversed(range(1, len(features) + 1))
+    combi_sizes = [len(features), 1]
+    for combi_size in combi_sizes:
+        combis = itertools.combinations(features, combi_size)
+        for combination in combis:
+            feature_set = FeatureSet()
+            for f in combination:
+                feature_set.add(f)
+
+            yield feature_set
+
+
+def train_test_split_images(images):
+    im_set = set(images)
+    for train_image in images:
+        test_images = im_set.difference(set(train_image))
+
+        yield (train_image, test_images)

@@ -1,15 +1,9 @@
-from six import iteritems
 from sklearn.externals import joblib
 import numpy as np
 import os
 
 from satsense.features import FeatureSet
-
-
-def get_project_root():
-    path = os.path.dirname(os.path.realpath(__file__))
-    project_root = "{}/../..".format(path)
-    return project_root
+from satsense.util.path import get_project_root
 
 
 def cache_model(model, filename):

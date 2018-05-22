@@ -8,8 +8,12 @@ import numpy as np
 import math
 from osgeo import gdal
 
+from skimage.filters import rank
+import skimage.morphology as morp
 from skimage import color, img_as_ubyte
 from skimage.feature import canny as canny_edge
+from skimage.transform import pyramid_reduce
+
 from .bands import RGB, MONOCHROME, MASK_BANDS
 
 import warnings
@@ -66,8 +70,16 @@ class Image:
 
     @property
     def canny_edged(self):
-        if self._canny_edge_image is None:
-            self._canny_edge_image = canny_edge(self.gray_ubyte)
+        try:
+            if self._canny_edge_image is None:
+                grayscale = np.copy(self.grayscale)
+                # local histogram equalization
+                grayscale = rank.equalize(grayscale, selem=morp.disk(30))
+
+                self._canny_edge_image = canny_edge(grayscale, sigma=0.5)
+        except TypeError:
+            print("CANNY TYPE ERROR")
+            return np.zeros(self.shape)
 
         return self._canny_edge_image
 
@@ -211,6 +223,8 @@ def normalize_image(image, bands, technique='cumulative',
     """
     Normalizes the image based on the band maximum
     """
+    # technique = 'meanstd'
+
     normalized_image = image.copy()
     for name, band in iteritems(bands):
         # print("Normalizing band number: {0} {1}".format(band, name))

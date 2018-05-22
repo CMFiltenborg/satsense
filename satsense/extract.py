@@ -1,11 +1,9 @@
-from satsense.classification.cache import load_to_cache, load_feature_cache, make_feature_cache_key, \
+from satsense.util.cache import load_to_cache, load_feature_cache, make_feature_cache_key, \
     cache_calculated_features
 from .features import FeatureSet
-from . import RGB
 from .generators import CellGenerator
 import numpy as np
 from six import iteritems
-import os
 import sys
 
 
@@ -27,6 +25,10 @@ def extract_features(features: FeatureSet, generator: CellGenerator, load_cached
     if load_cached:
         cached = load_feature_cache(features, image_name, window_size)
     to_cache = load_to_cache(features)
+
+    for name, feature in iteritems(features.items):
+        if hasattr(feature, 'initialize'):
+            feature.initialize(generator.image)
 
     for window in generator:
         for name, feature in iteritems(features.items):

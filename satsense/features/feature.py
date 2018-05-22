@@ -49,7 +49,7 @@ class FeatureSet(object):
         return self.string_presentation()
 
     def string_presentation(self):
-        return "_".join(["{}-{}".format(name, str(feature.windows)) for name, feature in iteritems(self._features)])
+        return "_".join([str(f) for k, f in self._features.items()])
 
     @property
     def items(self):

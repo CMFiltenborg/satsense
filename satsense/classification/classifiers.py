@@ -1,9 +1,14 @@
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn import svm
+
+def all_classifiers():
+    return [RF_classifier(),]
+    # yield from (SVM_classifier(), RF_classifier())
 
 
-def get_classifier():
-    return RF_classifier()
+def SVM_classifier():
+    return svm.SVC()
 
 
 def RF_classifier():

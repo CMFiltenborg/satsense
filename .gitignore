@@ -6,3 +6,6 @@ satsense.egg-info/
 *.pyc
 .project
 .pydevproject
+cache
+*.npy
+results

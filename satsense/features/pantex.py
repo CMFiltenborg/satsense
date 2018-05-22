@@ -103,3 +103,6 @@ class Pantex(Feature):
 
             result[i] = pantex(win.gray_ubyte, maximum=255)
         return result
+
+    def __str__(self):
+        return "Pantex-{}".format(str(self.windows))

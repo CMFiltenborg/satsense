@@ -10,11 +10,12 @@ from satsense.features.lacunarity import Lacunarity
 from satsense.bands import WORLDVIEW3, MASK_BANDS
 import numpy as np
 import matplotlib.pyplot as plt
+plt.switch_backend('agg')
 from sklearn.model_selection import train_test_split, learning_curve
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import cross_validate
 from sklearn.metrics import confusion_matrix
-from satsense.classification.cache import get_project_root
+from satsense.util.path import get_project_root, data_path
 import json
 from time import gmtime, strftime
 from satsense.classification.model import get_x_matrix, get_y_vector, balance_dataset, create_sift_feature, \
@@ -63,9 +64,9 @@ images = [
 show_plots = True
 results_path = '{root}/results'.format(root=get_project_root())
 current_time = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
-base_path = "/home/max/Documents/ai/scriptie/data/Clip"
+base_path = data_path()
 extension = 'tif'
-main_window_size = (1, 1)
+main_window_size = (30, 30)
 percentage_threshold = 0.5
 test_size = 0.2
 class_ratio = 1.3
@@ -73,53 +74,75 @@ feature_set = FeatureSet()
 pantex = Pantex(pantex_window_sizes)
 
 for image_name in images:
-    image_file = "{base_path}/{image_name}.{extension}".format(
-        base_path=base_path,
-        image_name=image_name,
-        extension=extension
-    )
-    bands = WORLDVIEW3
-    mask_full_path = "{base_path}/{image_name}_masked.tif".format(base_path=base_path, image_name=image_name)
-    sat_image = SatelliteImage.load_from_file(image_file, bands)
-    sat_image_shape = sat_image.shape
+    for lac_box_size in (10, 20, 30):
+        image_file = "{base_path}/{image_name}.{extension}".format(
+            base_path=base_path,
+            image_name=image_name,
+            extension=extension
+        )
+        bands = WORLDVIEW3
+        mask_full_path = "{base_path}/{image_name}_masked.tif".format(base_path=base_path, image_name=image_name)
+        sat_image = SatelliteImage.load_from_file(image_file, bands)
+        sat_image_shape = sat_image.shape
 
 
-    # sift = create_sift_feature(sat_image, ((25, 25), (50, 50), (100, 100)), image_name, n_clusters=n_clusters,
-    #                            cached=True)
+        # sift = create_sift_feature(sat_image, ((25, 25), (50, 50), (100, 100)), image_name, n_clusters=n_clusters,
+        #                            cached=True)
 
-    # lacunarity = create_lacunarity(sat_image, image_name, windows=((25, 25),), cached=True)
-    lacunarity = Lacunarity(windows=((200, 200),))
-    feature_set.add(lacunarity, "LACUNARITY")
-    # feature_set.add(pantex, "PANTEX")
-    # feature_set.add(sift, "SIFT")
+        # lacunarity = create_lacunarity(sat_image, image_name, windows=((25, 25),), cached=True)
+        lac_window_size = ((100, 100),)
+        lacunarity = Lacunarity(windows=lac_window_size, box_sizes=(lac_box_size,))
+        feature_set.add(lacunarity, "LACUNARITY")
+        # feature_set.add(pantex, "PANTEX")
+        # feature_set.add(sift, "SIFT")
 
-    classifier = RF_classifier()
+        classifier = RF_classifier()
 
-    # del sat_image  # Free-up memory
+        # del sat_image  # Free-up memory
 
-    X = get_x_matrix(sat_image, image_name=image_name, feature_set=feature_set, window_size=main_window_size,
-                     cached=True)
+        X = get_x_matrix(sat_image, image_name=image_name, feature_set=feature_set, window_size=main_window_size,
+                         cached=True)
 
-    X = np.mean(X, axis=3)
+        # X = np.mean(X, axis=3)
 
-    ds, img, bands = load_from_file(image_file, WORLDVIEW3)
-    img = normalize_image(img, bands)
-    rgb_img = get_rgb_bands(img, bands)
-    plt.imshow(rgb_img)
-    plt.savefig(results_path + "/lacunarity_heatmap_image.png".format())
+        ds, img, bands = load_from_file(image_file, WORLDVIEW3)
+        img = normalize_image(img, bands)
+        rgb_img = get_rgb_bands(img, bands)
+        plt.figure()
+        plt.imshow(rgb_img)
+        plt.savefig(results_path + "/lacunarity_heatmap_image_{image_name}.png".format(
+            image_name=image_name
+        ))
 
-    dataset = gdal.Open(mask_full_path, gdal.GA_ReadOnly)
-    array = dataset.ReadAsArray()
-    array = np.min(array, 0)
-    array = array[:, :, np.newaxis]
-    print(array.shape)
-    binary_sat_image = SatelliteImage(dataset, array, MASK_BANDS)
-    generator = CellGenerator(image=binary_sat_image, size=main_window_size)
-    X.reshape(generator.shape())
+        dataset = gdal.Open(mask_full_path, gdal.GA_ReadOnly)
+        array = dataset.ReadAsArray()
+        array = np.min(array, 0)
+        array = array[:, :, np.newaxis]
+        print(array.shape)
+        binary_sat_image = SatelliteImage(dataset, array, MASK_BANDS)
+        generator = CellGenerator(image=binary_sat_image, size=main_window_size)
+        X = X.reshape(generator.shape())
+        print(X.shape)
 
-    plt.figure()
-    sns.heatmap(X)
-    plt.savefig(results_path + "/lacunarity_heatmap.png".format())
+        red_size = int(X.shape[0] / 10)
+        # X = X[red_size:X.shape[0]-red_size, red_size:X.shape[1]-red_size]
+        X_mask = np.copy(X)
+        X_mask[:, :] = True
+        X_mask[red_size:X.shape[0]-red_size, red_size:X.shape[1]-red_size] = False
+        X_mask = X_mask.astype(np.bool)
+        X[X_mask == True] = 0
+
+        # X = np.where(np.logical_not())
+        # X[0:red_size, X.shape[1]-red_size:X.shape[1]] = 0
+        print(X.shape)
+
+        plt.figure()
+        sns.heatmap(X)
+        plt.savefig(results_path + "/lacunarity_heatmap_{image_name}_box-size{lac_box_size}_lac-window-size{lac_window_size}.png".format(
+            image_name=image_name,
+            lac_box_size=lac_box_size,
+            lac_window_size=lac_window_size
+        ))
 
     # binary_mask = X
     # show_mask = np.ma.masked_where(binary_mask == 0, binary_mask)
