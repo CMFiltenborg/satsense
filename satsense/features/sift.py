@@ -6,7 +6,6 @@ from .feature import Feature
 from sklearn.cluster import KMeans, MiniBatchKMeans
 from sklearn.preprocessing import MinMaxScaler
 from numba import jit
-from satsense.util.calc import count_codewords
 from typing import Iterator
 
 def sift_cluster(sat_images: Iterator[SatelliteImage], n_clusters=32, sample_size=100000) -> MiniBatchKMeans:
@@ -64,14 +63,13 @@ class Sift(Feature):
         del kp  # Free up memory
 
 
-
         # Is none if no descriptors are found, i.e. on 0 input range
         cluster_count = kmeans.n_clusters
         if descriptors is None:
-            return np.zeros((cluster_count))
+            return np.zeros((cluster_count), dtype=np.int32)
 
         codewords = kmeans.predict(descriptors)
-        counts = count_codewords(codewords, cluster_count)
+        counts = np.bincount(codewords, minlength=cluster_count)
 
         # Perform normalization
         if self.normalized:
