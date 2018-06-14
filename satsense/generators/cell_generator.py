@@ -1,11 +1,7 @@
 import math
-from collections import namedtuple
-
 from numba import jit
+from ..image import Image, SatelliteImage, Window
 
-from ..image import Image, Window, SatelliteImage
-
-import numpy as np
 
 class Cell(Window):
     def __init__(self, image: Image, x, y, x_range, y_range, orig=None):
@@ -99,7 +95,6 @@ def super_cell(image, size, x_range, y_range, padding=True):
     y_range = slice(y_start, y_end, 1)
 
     image = image[x_range, y_range]
-    # im = self.image.shallow_copy_range(x_range, y_range)
     if padding and pad_needed:
         pad_width = ((x_pad_before, x_pad_after),
                      (y_pad_before, y_pad_after),
@@ -112,77 +107,48 @@ def super_cell(image, size, x_range, y_range, padding=True):
 
         image = np.pad(image, pad_width, 'constant', constant_values=0)
 
-    # (Cell(im, self.x, self.y, x_range, y_range, orig=None))
     return image, x_range, y_range
 
 class CellGenerator:
     def __init__(self, image: SatelliteImage, size: tuple, length=None):
-        self.cur_x = 0
-        self.cur_y = -1
-
-        self.x_size, self.y_size = size
         self.image = image
 
+        self.x_size, self.y_size = size
         self.x_length = math.ceil(image.shape[0] / self.x_size)
         self.y_length = math.ceil(image.shape[1] / self.y_size)
 
         if length and length[0] < self.x_length:
             self.x_length = length[0]
-        
+
         if length and length[1] < self.y_length:
             self.y_length = length[1]
 
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        return self.next()
-
-    def get(self, index):
-        return self.cell_from_slice(self.slice_at_index(index))
-
-    def len(self):
+    def __len__(self):
         return self.x_length * self.y_length
 
+    @property
     def shape(self):
-        return self.x_length, self.y_length
+        return (self.x_length, self.y_length)
 
-    def next(self):
-        return self.cell_from_slice(self.next_slice())
+    def __iter__(self):
+        for x in range(self.x_length):
+            for y in range(self.y_length):
+                yield self[x, y]
 
-    def cell_from_slice(self, the_slice):
-        x, y, x_range, y_range = the_slice
+    def __getitem__(self, index):
+        x, y = index
+        x = self.x_length - x if x < 0 else x
+        y = self.y_length - y if y < 0 else y
+
+        if x >= self.x_length or y >= self.y_length:
+            raise IndexError('{} out of range for image of shape {}'.format(
+                index, self.shape))
+
+        x_start = x * self.x_size
+        x_range = slice(x_start, x_start + self.x_size)
+
+        y_start = y * self.y_size
+        y_range = slice(y_start, y_start + self.y_size)
+
         im = self.image.shallow_copy_range(x_range, y_range)
         return Cell(im, x, y, x_range, y_range, orig=None)
-
-    def next_slice(self):
-        if self.cur_y + 1 < self.y_length:
-            self.cur_y += 1
-        elif self.cur_x + 1 < self.x_length:
-            self.cur_y = 0
-            self.cur_x += 1
-        else:
-            raise StopIteration
-
-        x_start = self.cur_x * self.x_size
-        x_end = x_start + self.x_size
-        y_start = self.cur_y * self.y_size
-        y_end = y_start + self.y_size
-        return self.cur_x, self.cur_y, slice(x_start, x_end), slice(y_start, y_end)
-
-    def slice_at_index(self, index):
-        x = math.floor(index / self.y_length)
-        y = index % self.y_length
-
-        if x < self.x_length and y < self.y_length and x >= 0 and y >= 0:
-            x_start = self.x_size * x
-            x_end = self.x_size * (x+1)
-            y_start = self.y_size * y
-            y_end = self.y_size * (y+1)
-
-            return x, y - 1, slice(x_start, x_end, 1), slice(y_start, y_end, 1)
-        else:
-            raise IndexError("index out of range:", index,
-                             " e.g. (", x, ",", y, ") does not fall within",
-                             "image bounds: (", self.x_size, ",", self.y_size, ")")

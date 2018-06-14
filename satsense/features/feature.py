@@ -3,6 +3,7 @@ from collections import OrderedDict
 
 from six import iteritems
 
+
 class Feature(object):
     """
     Feature superclass
@@ -79,5 +80,6 @@ class FeatureSet(object):
     def _recalculate_feature_indices(self):
         self._cur_index = 0
         for name, feature in iteritems(self._features):
-            feature.indices = slice(self._cur_index, self._cur_index + feature.feature_size, 1)
+            feature.indices = slice(self._cur_index,
+                                    self._cur_index + feature.feature_size, 1)
             self._cur_index += feature.feature_size

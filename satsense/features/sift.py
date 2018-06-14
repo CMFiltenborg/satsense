@@ -1,33 +1,38 @@
-import numpy as np
-import scipy as sp
-import cv2
-
-from satsense.generators import CellGenerator
-from satsense import SatelliteImage
-from satsense.generators.cell_generator import super_cell
-from .feature import Feature
-from sklearn.cluster import MiniBatchKMeans
+"""Sift feature."""
 from typing import Iterator
 
-def sift_cluster(sat_images: Iterator[SatelliteImage], n_clusters=32, sample_size=100000) -> MiniBatchKMeans:
+import cv2
+import numpy as np
+from sklearn.cluster import MiniBatchKMeans
+
+from .. import SatelliteImage
+from .feature import Feature
+from satsense.generators import CellGenerator
+from satsense.generators.cell_generator import super_cell
+
+def sift_cluster(sat_images: Iterator[SatelliteImage],
+                 n_clusters=32,
+                 sample_size=100000) -> MiniBatchKMeans:
+    """Create the clusters needed to compute the sift feature."""
     sift = cv2.xfeatures2d.SIFT_create()
-    base_descriptors = None
+    descriptors = None
     for sat_image in sat_images:
-        kp, descriptors = sift.detectAndCompute(sat_image.gray_ubyte, None)
-        del kp  # Free up memory
+        _, new_descriptors = sift.detectAndCompute(sat_image.gray_ubyte, None)
+        del _  # Free up memory
 
         # Add descriptors if we already had some
-        if base_descriptors is None:
-            base_descriptors = descriptors
+        if descriptors is None:
+            descriptors = new_descriptors
         else:
-            base_descriptors = np.append(base_descriptors, descriptors, axis=0)
-
+            descriptors = np.append(descriptors, new_descriptors, axis=0)
 
     # Sample {sample_size} descriptors from all descriptors
     # (Takes random rows) and cluster these
-    X = base_descriptors[np.random.choice(base_descriptors.shape[0], sample_size, replace=False), :]
+    descriptors = descriptors[np.random.choice(
+        descriptors.shape[0], sample_size, replace=False), :]
 
-    mbkmeans = MiniBatchKMeans(n_clusters=n_clusters, random_state=42).fit(X)
+    mbkmeans = MiniBatchKMeans(
+        n_clusters=n_clusters, random_state=42).fit(descriptors)
 
     return mbkmeans
 
@@ -64,7 +69,13 @@ def sift_for_chunk(chunk, kmeans, normalized=True):
 
 
 class Sift(Feature):
-    def __init__(self, kmeans: MiniBatchKMeans, windows=((25, 25),), normalized=True):
+    """Sift feature."""
+
+    def __init__(self,
+                 kmeans: MiniBatchKMeans,
+                 windows=((25, 25), ),
+                 normalized=True):
+        """Create sift feature."""
         super(Sift, self)
         self.windows = windows
         self.kmeans = kmeans
@@ -74,15 +85,6 @@ class Sift(Feature):
 
     def __call__(self, chunk):
         return sift_for_chunk(chunk, self.kmeans, self.normalized)
-
-        # result = np.zeros(self.feature_size)
-        # n_clusters = self.kmeans.n_clusters
-        # for i, window in enumerate(self.windows):
-        #     win = cell.super_cell(window, padding=True)
-        #     start_index = i * n_clusters
-        #     end_index = (i + 1) * n_clusters
-        #     result[start_index: end_index] = self.sift(win.gray_ubyte, self.kmeans)
-        # return result
 
     def __str__(self):
         normalized = "n" if self.normalized == True else "nn"
