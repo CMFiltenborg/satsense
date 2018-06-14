@@ -33,7 +33,6 @@ def texton_cluster(sat_images: Iterator[SatelliteImage], n_clusters=32, sample_s
         else:
             base_descriptors = np.append(base_descriptors, descriptors, axis=0)
 
-
     # Sample {sample_size} descriptors from all descriptors
     # (Takes random rows) and cluster these
     print("Sampling from {}".format(str(base_descriptors.shape)))
@@ -79,7 +78,6 @@ def texton_for_chunk(chunk, kmeans, normalized=True):
     for i in range(chunk_len):
         coords[i, :] = chunk[i][0:2]
 
-
         # sub_descriptors = chunk[i][2]
         # sub_descriptors = sub_descriptors.reshape((sub_descriptors.shape[0] * sub_descriptors.shape[1], sub_descriptors.shape[2]))
 
@@ -89,7 +87,8 @@ def texton_for_chunk(chunk, kmeans, normalized=True):
         # Calculate Difference-of-Gaussian
         dog = np.expand_dims(gaussian(im_grayscale, sigma=1) - gaussian(im_grayscale, sigma=3), axis=2)
         sub_descriptors = np.append(sub_descriptors, dog, axis=2)
-        sub_descriptors = sub_descriptors.reshape((sub_descriptors.shape[0] * sub_descriptors.shape[1], sub_descriptors.shape[2]))
+        sub_descriptors = sub_descriptors.reshape(
+            (sub_descriptors.shape[0] * sub_descriptors.shape[1], sub_descriptors.shape[2]))
 
         codewords = kmeans.predict(sub_descriptors)
         counts = np.bincount(codewords, minlength=cluster_count)
@@ -133,59 +132,17 @@ class Texton(Feature):
         # return int(math.ceil(im_shape[0] * im_shape[1] / cpu_cnt))
         return im_shape[0]
 
-
-    def initialize(self, generator: CellGenerator):
+    def initialize(self, generator: CellGenerator, scale):
         im_grayscale = generator.image.grayscale
-
-
-        # descriptors = compute_feats(im_grayscale, create_kernels())
-        # Calculate Difference-of-Gaussian
-        # dog = np.expand_dims(gaussian(im_grayscale, sigma=1) - gaussian(im_grayscale, sigma=3), axis=2)
-        # descriptors = np.append(descriptors, dog, axis=2)
 
         data = []
         for window in generator:
-            for scale in self.windows:
-                # win = window.super_cell(scale, padding=True)
-                im, x_range, y_range = super_cell(im_grayscale, scale, window.x_range, window.y_range, padding=True)
-                # sub_descriptors = descriptors[x_range, y_range, :]
-                # print(sub_descriptors.shape)
-                # processing_tuple = (window.x, window.y, sub_descriptors)
-                processing_tuple = (window.x, window.y, im)
-                data.append(processing_tuple)
+            im, x_range, y_range = super_cell(im_grayscale, scale, window.x_range, window.y_range, padding=True)
+            processing_tuple = (window.x, window.y, im)
+            data.append(processing_tuple)
 
         return data
 
-
-
-
-    # def texton(self, window: Cell, kmeans: MiniBatchKMeans):
-    #     """
-    #     Calculate the sift feature on the given window
-    #
-    #     Args:
-    #         window (nparray): A window of an image
-    #         maximum (int): The maximum value in the image
-    #     """
-    #     # descriptors = compute_feats(window_gray_ubyte, self.kernels)
-    #     # dog = np.expand_dims((gaussian(window_gray_ubyte, sigma=1) - gaussian(window_gray_ubyte, sigma=3)).ravel(), axis=1)
-    #     # descriptors = np.append(descriptors, dog, axis=1)
-    #     # if descriptors is None:
-    #     #     return np.zeros((cluster_count))
-    #
-    #     cluster_count = kmeans.n_clusters
-    #
-    #     descriptors = self.descriptors[window.x_range, window.y_range, :]
-    #     descriptors = descriptors.reshape((descriptors.shape[0] * descriptors.shape[1], descriptors.shape[2]))
-    #
-    #     codewords = kmeans.predict(descriptors)
-    #     counts = np.bincount(codewords, minlength=cluster_count)
-    #
-    #     # Perform normalization
-    #     if self.normalized:
-    #         counts = counts / cluster_count
-    #
-    #     return counts
 
 
 def test_texton():

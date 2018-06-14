@@ -66,35 +66,43 @@ def compute_feature(feature, generator):
     print("\n--- Calculating feature: {} ---\n".format(feature))
 
     start = time.time()
-    if hasattr(feature, 'initialize'):
-        data = feature.initialize(generator)
-    else:
-        raise ValueError("Initialize not implemented")
-    end = time.time()
-    print("Preparing data cells took {} seconds".format((end - start)))
-    shape = generator.shape()
 
-    chunk_size = shape[0]
-    cpu_cnt = cpu_count()
+    # Calculate for different scales separately.
+    for scale in feature.windows:
+        # Prepare data for multiprocessing of individual features
+        # Every feature needs 'initialize' option to work
+        if hasattr(feature, 'initialize'):
+            data = feature.initialize(generator, scale)
+        else:
+            raise ValueError("Initialize not implemented")
 
-    # Get chunk size if feature has that function
-    if hasattr(feature, 'chunk_size'):
-        chunk_size = feature.chunk_size(cpu_cnt, shape)
+        end = time.time()
+        print("Preparing data cells took {} seconds".format((end - start)))
+        shape = generator.shape()
 
-    windows_chunked = [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
-    total_chunks = len(windows_chunked)
+        chunk_size = shape[0]
+        cpu_cnt = cpu_count()
 
-    print("\nTotal chunks to compute: {}, chunk_size: {}".format(total_chunks, chunk_size))
+        # Get chunk size if feature has that function
+        if hasattr(feature, 'chunk_size'):
+            chunk_size = feature.chunk_size(cpu_cnt, shape)
 
-    p = Pool(cpu_cnt, maxtasksperchild=1)
-    compute_chunk_f = partial(compute_chunk, feature=feature)
-    processing_results = p.map(compute_chunk_f, windows_chunked, chunksize=1)
-    p.close()
-    p.join()
+        windows_chunked = [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
+        total_chunks = len(windows_chunked)
 
-    feature_matrix = np.zeros((shape[0], shape[1], feature.feature_size))
-    for coords, chunk_matrix in processing_results:
-        load_results_into_matrix(feature_matrix, coords, chunk_matrix)
+        print("\nTotal chunks to compute: {}, chunk_size: {}".format(total_chunks, chunk_size))
+
+        p = Pool(cpu_cnt, maxtasksperchild=1)
+        compute_chunk_f = partial(compute_chunk, feature=feature)
+        processing_results = p.map(compute_chunk_f, windows_chunked, chunksize=1)
+        p.close()
+        p.join()
+
+        feature_matrix = np.zeros((shape[0], shape[1], feature.feature_size))
+
+        # Load individual results of processing back into one matrix
+        for coords, chunk_matrix in processing_results:
+            load_results_into_matrix(feature_matrix, coords, chunk_matrix)
 
     return feature_matrix
 

@@ -135,13 +135,12 @@ class Pantex(Feature):
         #     result[i] = pantex(win.gray_ubyte, maximum=255)
         # return result
 
-    def initialize(self, generator: CellGenerator):
+    def initialize(self, generator: CellGenerator, scale):
         data = []
         for window in generator:
-            for scale in self.windows:
-                win_gray_ubyte, _, _ = super_cell(generator.image.gray_ubyte, scale, window.x_range, window.y_range, padding=True)
-                processing_tuple = (window.x, window.y, win_gray_ubyte)
-                data.append(processing_tuple)
+            win_gray_ubyte, _, _ = super_cell(generator.image.gray_ubyte, scale, window.x_range, window.y_range, padding=True)
+            processing_tuple = (window.x, window.y, win_gray_ubyte)
+            data.append(processing_tuple)
 
         return data
 
