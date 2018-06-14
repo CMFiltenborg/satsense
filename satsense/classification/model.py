@@ -7,7 +7,7 @@ import gdal
 import numpy as np
 from imblearn.over_sampling import RandomOverSampler, SMOTE, ADASYN
 
-from satsense.extract import extract_features_conc, extract_features_futur, extract_features_futur2
+from satsense.extract import extract_features
 
 from satsense import SatelliteImage, extract_features
 from satsense.bands import MASK_BANDS, WORLDVIEW3
@@ -85,7 +85,6 @@ def get_x_matrix(sat_image: SatelliteImage, image_name, feature_set, window_size
     # bands = WORLDVIEW2
     # sat_image = SatelliteImage.load_from_file(image_file, bands)
 
-
     # Calculate PANTEX feature for satellite image
     # Calculates Z features, resulting dimensions is:
     # [M x N x Z], where 0,0,: are the features of the first block
@@ -97,7 +96,7 @@ def get_x_matrix(sat_image: SatelliteImage, image_name, feature_set, window_size
     # print("Elapsed time extract {}".format(end - start))
 
     generator = CellGenerator(image=sat_image, size=window_size)
-    calculated_features = extract_features_futur2(feature_set, generator, image_name=image_name, load_cached=cached)
+    calculated_features = extract_features(feature_set, generator, image_name=image_name, load_cached=cached)
 
     if len(calculated_features.shape) == 3:
         nrows = calculated_features.shape[0] * calculated_features.shape[1]
