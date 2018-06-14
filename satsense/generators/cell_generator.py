@@ -1,5 +1,8 @@
 import math
 from collections import namedtuple
+
+from numba import jit
+
 from ..image import Image, Window, SatelliteImage
 
 import numpy as np
@@ -52,8 +55,65 @@ class Cell(Window):
         if padding and pad_needed:
             im.pad(x_pad_before, x_pad_after, y_pad_before, y_pad_after)
 
-        return Cell(im, self.x, self.y, x_range, y_range, orig=self.image)
+        return Cell(im, self.x, self.y, x_range, y_range, orig=None)
 
+@jit
+def super_cell(image, size, x_range, y_range, padding=True):
+    """
+    """
+    x_offset = (size[0] / 2.0)
+    y_offset = (size[1] / 2.0)
+
+    x_middle = (x_range.stop + x_range.start) / 2.0
+    y_middle = (y_range.stop + y_range.start) / 2.0
+
+    x_start = math.floor(x_middle - x_offset)
+    x_end = math.floor(x_middle + x_offset)
+
+    y_start = math.floor(y_middle - y_offset)
+    y_end = math.floor(y_middle + y_offset)
+
+    y_pad_before = 0
+    y_pad_after = 0
+    x_pad_before = 0
+    x_pad_after = 0
+    pad_needed = False
+    if x_start < 0:
+        pad_needed = True
+        x_pad_before = math.floor(math.fabs(x_start))
+        x_start = 0
+    if x_end > image.shape[0]:
+        pad_needed = True
+        x_pad_after = math.ceil(x_end - image.shape[0] + 1)
+        x_end = image.shape[0] - 1
+    if y_start < 0:
+        pad_needed = True
+        y_pad_before = math.floor(math.fabs(y_start))
+        y_start = 0
+    if y_end > image.shape[1]:
+        pad_needed = True
+        y_pad_after = math.ceil(y_end - image.shape[1] + 1)
+        y_end = image.shape[1] - 1
+
+    x_range = slice(x_start, x_end, 1)
+    y_range = slice(y_start, y_end, 1)
+
+    image = image[x_range, y_range]
+    # im = self.image.shallow_copy_range(x_range, y_range)
+    if padding and pad_needed:
+        pad_width = ((x_pad_before, x_pad_after),
+                     (y_pad_before, y_pad_after),
+                     (0, 0))
+
+        if len(image.shape) < 3:
+            pad_width = ((x_pad_before, x_pad_after),
+                         (y_pad_before, y_pad_after),
+                         )
+
+        image = np.pad(image, pad_width, 'constant', constant_values=0)
+
+    # (Cell(im, self.x, self.y, x_range, y_range, orig=None))
+    return image, x_range, y_range
 
 class CellGenerator:
     def __init__(self, image: SatelliteImage, size: tuple, length=None):
@@ -94,7 +154,7 @@ class CellGenerator:
     def cell_from_slice(self, the_slice):
         x, y, x_range, y_range = the_slice
         im = self.image.shallow_copy_range(x_range, y_range)
-        return Cell(im, x, y, x_range, y_range, orig=self.image)
+        return Cell(im, x, y, x_range, y_range, orig=None)
 
     def next_slice(self):
         if self.cur_y + 1 < self.y_length:

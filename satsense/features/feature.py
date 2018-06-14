@@ -57,7 +57,7 @@ class FeatureSet(object):
 
     def add(self, feature, name=None):
         if not name:
-            name = "{0}-{1}".format(feature.__class__.__name__,
+            name = "{0}-{1}".format(feature.__class__.__name__.upper(),
                                     len(self._features) + 1)
 
         self._features[name] = (feature)

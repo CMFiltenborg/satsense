@@ -1,6 +1,9 @@
 import numpy as np
 import scipy as sp
 from skimage.feature import greycomatrix, greycoprops
+
+from satsense.generators import CellGenerator
+from satsense.generators.cell_generator import super_cell
 from .feature import Feature
 import warnings
 
@@ -90,19 +93,58 @@ def pantex(window, maximum=255):
     return pan.min()
 
 
+def pantex_for_chunk(chunk, maximum=255):
+    chunk_len = len(chunk)
+    offsets = get_rii_dist_angles()
+
+    coords = np.zeros((chunk_len, 2))
+    chunk_matrix = np.zeros((chunk_len, 1), dtype=np.float64)
+    for i in range(chunk_len):
+        coords[i, :] = chunk[i][0:2]
+        win_gray_ubyte = chunk[i][2]
+
+        pan = np.zeros(len(offsets))
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', FutureWarning)
+            for i, offset in enumerate(offsets):
+                glcm = greycomatrix(win_gray_ubyte, [offset[0]], [offset[1]], symmetric=True,
+                                    normed=True, levels=maximum + 1)
+                pan[i] = greycoprops(glcm, 'contrast')
+
+        chunk_matrix[i] = pan.min()
+
+    return coords, chunk_matrix
+
+
+
+
 class Pantex(Feature):
     def __init__(self, windows=((25, 25),)):
         super(Pantex, self)
         self.windows = windows
         self.feature_size = len(self.windows)
 
-    def __call__(self, cell):
-        result = np.zeros(self.feature_size)
-        for i, window in enumerate(self.windows):
-            win = cell.super_cell(window, padding=True)
+    def __call__(self, chunk):
+        return pantex_for_chunk(chunk)
 
-            result[i] = pantex(win.gray_ubyte, maximum=255)
-        return result
+        # result = np.zeros(self.feature_size)
+        # for i, window in enumerate(self.windows):
+        #     win = cell.super_cell(window, padding=True)
+        #
+        #     result[i] = pantex(win.gray_ubyte, maximum=255)
+        # return result
+
+    def initialize(self, generator: CellGenerator):
+        data = []
+        for window in generator:
+            for scale in self.windows:
+                win_gray_ubyte, _, _ = super_cell(generator.image.gray_ubyte, scale, window.x_range, window.y_range, padding=True)
+                processing_tuple = (window.x, window.y, win_gray_ubyte)
+                data.append(processing_tuple)
+
+        return data
+
 
     def __str__(self):
-        return "Pantex-{}".format(str(self.windows))
+        return "Pa-{}".format(str(self.windows))

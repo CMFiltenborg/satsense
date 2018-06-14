@@ -72,11 +72,13 @@ class Image:
     def canny_edged(self):
         try:
             if self._canny_edge_image is None:
-                grayscale = np.copy(self.grayscale)
+                print("Calculating canny")
+                grayscale = self.grayscale
                 # local histogram equalization
                 grayscale = rank.equalize(grayscale, selem=morp.disk(30))
 
                 self._canny_edge_image = canny_edge(grayscale, sigma=0.5)
+                print("canny edge calcd")
         except TypeError:
             print("CANNY TYPE ERROR")
             return np.zeros(self.shape)
@@ -105,10 +107,8 @@ class Image:
             im._grayscale_image = self._grayscale_image[x_range, y_range]
         if self._gray_ubyte_image is not None:
             im._gray_ubyte_image = self._gray_ubyte_image[x_range, y_range]
-
-        # Get canny edged image and automatically calculate it if it was not defined yet.
         if self._canny_edge_image is not None:
-            im._canny_edge_image = self.canny_edged[x_range, y_range]
+            im._canny_edge_image = self._canny_edge_image[x_range, y_range]
 
         # Check whether we need padding. This should only be needed at the
         # right and bottom edges of the image
@@ -172,13 +172,14 @@ class Window(Image):
         self._rgb_image = image._rgb_image
         self._grayscale_image = image._grayscale_image
         self._gray_ubyte_image = image._gray_ubyte_image
+        self._canny_edge_image = image._canny_edge_image
 
         self.x = x
         self.y = y
         self.x_range = x_range
         self.y_range = y_range
 
-        if orig:
+        if orig is not None:
             self.image = orig
         else:
             self.image = image

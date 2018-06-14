@@ -8,6 +8,7 @@ import numpy as np
 from satsense import SatelliteImage
 from satsense.analysis.plot import load_from_file
 from satsense.bands import MASK_BANDS, WORLDVIEW3
+from satsense.classification.model import get_y_vector
 from satsense.generators import CellGenerator
 from satsense.image import normalize_image, get_rgb_bands
 import cv2
@@ -20,10 +21,10 @@ images = [
     'section_3',
 ]
 
-shape_file_path = "/media/max/0D4976EB1E91CCB9/data/Clip/slums_approved.shp"
-smallest_window_size = (25, 25)
+smallest_window_size = (30, 30)
 percentage_threshold = 0.5
 base_path = "/home/max/Documents/ai/scriptie/data/Clip"
+shape_file_path = "/home/max/Documents/ai/scriptie/data/Clip/slums_approved.shp"
 
 for image_name in images:
     with fiona.open(shape_file_path, "r") as shapefile:
@@ -52,13 +53,14 @@ for image_name in images:
         image_name=image_name,
     )
 
-    with rasterio.open(out_file, "w", **out_meta) as dest:
-        dest.write(out_image)
+    # with rasterio.open(out_file, "w", **out_meta) as dest:
+    #     dest.write(out_image)
 
     dataset = gdal.Open(out_file, gdal.GA_ReadOnly)
     # dataset = dataset[0, :, :]
 
     array = dataset.ReadAsArray()
+    print(array.shape)
     array = np.min(array, 0)
     array = array[:, :, np.newaxis]
 
@@ -105,12 +107,36 @@ for image_name in images:
     binary_mask = result_mask
     show_mask = np.ma.masked_where(binary_mask == 0, binary_mask)
     plt.imshow(show_mask[:, :, 0], cmap='jet', interpolation='none', alpha=0.7)
-    plt.title('Binary mask')
+    # plt.title('Binary mask')
     plt.show()
     print('Min {} Max {}'.format(binary_mask.min(), binary_mask.max()))
     print('Len > 0: {}'.format(len(binary_mask[binary_mask > 0])))
     print('Len == 0: {}'.format(len(binary_mask[binary_mask == 0])))
 
+    plt.figure()
+    plt.axis('off')
+    plt.imshow(result_mask[:, :, 0], cmap='jet', interpolation='none', alpha=1.0)
+    plt.show()
+
+
     jaccard_index = jaccard_index_binary_masks(truth_mask[:, :, 0], binary_mask[:, :, 0])
     print("Jaccard index: {}".format(jaccard_index))
+
+    y_vector, y_mask = get_y_vector(out_file, smallest_window_size, 0.5, False)
+    # assert(np.array_equal(np.reshape(y_vector, y_matrix.shape), y_matrix))
+
+    # y_matrix = np.reshape(y_vector, y_matrix.shape)
+
+    # plt.figure()
+    # plt.title("??")
+    # plt.imshow(y_matrix, cmap='jet', interpolation='none', alpha=1.0)
+    # plt.show()
+    # y_mask = np.reshape(y_vector, generator.shape())
+
+    plt.figure()
+    plt.axis('off')
+    plt.imshow(rgb_img)
+    show_mask = np.ma.masked_where(y_mask == 0, y_mask)
+    plt.imshow(show_mask[:, :, 0], cmap='jet', interpolation='none', alpha=0.5)
+    plt.show()
 

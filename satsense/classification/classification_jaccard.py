@@ -6,25 +6,26 @@ import gdal
 from satsense import SatelliteImage
 from satsense.features import FeatureSet, Pantex
 from satsense.features.lacunarity import Lacunarity
-from satsense.bands import WORLDVIEW3, MASK_BANDS
+from satsense.bands import WORLDVIEW3
 import numpy as np
 import matplotlib.pyplot as plt
 
 from satsense.features.sift import sift_cluster, Sift
 from satsense.features.texton import texton_cluster, Texton
 from satsense.generators import CellGenerator
-from satsense.image import normalize_image, get_rgb_bands, get_grayscale_image
+from satsense.image import normalize_image, get_rgb_bands
 
 plt.switch_backend('agg')
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, recall_score, precision_score, f1_score, matthews_corrcoef
 from sklearn.metrics import confusion_matrix
 from satsense.util.path import get_project_root, data_path
 from time import gmtime, strftime
-from satsense.classification.model import create_models, generate_tests, cv_train_test_split_images, get_x_matrix, \
+from satsense.classification.model import create_models, cv_train_test_split_images, get_x_matrix, \
     get_y_vector, \
-    save_classification_results, generate_classifiers, generate_feature_sets
+    save_classification_results, generate_classifiers, generate_feature_scales, generate_oversamplers
 from satsense.performance import jaccard_index_binary_masks
 import pandas as pd
+
 
 def load_from_file(path, bands):
     """
@@ -101,34 +102,42 @@ def plot_overlap(y_test, y_pred, image_name, image_full_path, test_sat_image, ma
     # array = array[:, :, np.newaxis]
 
     # truth_mask = np.where(array > 0, 1, 0)
-
-
-
     # binary_sat_image = SatelliteImage.load_from_file(binary_file_path, bands=mask_bands)
     # binary_sat_image = SatelliteImage(dataset, array, MASK_BANDS)
     generator = CellGenerator(image=test_sat_image, size=main_window_size)
 
     # result_mask = np.zeros(array.shape, dtype=np.uint8)
-    result_mask = np.zeros(generator.shape())
-    truth_mask = np.zeros(generator.shape())
+    # result_mask = np.zeros(generator.shape())
+    # truth_mask = np.zeros(generator.shape())
 
     # y_pred_im = y_pred[groups == im_num]
-    print("unique y_pred", np.unique(y_pred, return_counts=True))
-    print(y_pred.shape)
-    print(y_pred)
-    print("Gen shape", generator.x_length, generator.y_length, generator.x_length * generator.y_length)
-    print("result mask shape", result_mask.shape)
+    # print("unique y_pred", np.unique(y_pred, return_counts=True))
+    # print(y_pred.shape)
+    # print(y_pred)
+    # print("Gen shape", generator.x_length, generator.y_length, generator.x_length * generator.y_length)
+    # print("result mask shape", result_mask.shape)
 
     print("{} == {}".format(generator.x_length * generator.y_length, y_pred.shape))
-    real_scale_show_mask = np.zeros(
+    full_scale_pred_mask = np.zeros(
         (test_image_loaded.shape[0], test_image_loaded.shape[1])
     )
+    full_scale_truth_mask = np.zeros(
+        (test_image_loaded.shape[0], test_image_loaded.shape[1])
+    )
+
+    gen_length = len(tuple(i for i in generator))
+    # print("{} == {}".format(gen_length, generator.x_length * generator.y_length))
+    # print("{} == {}".format(gen_length, y_pred.shape))
+    # print("{} == {}".format(gen_length, y_test.shape))
+    # assert(gen_length == generator.x_length * generator.y_length)
+    generator = CellGenerator(image=test_sat_image, size=main_window_size)
 
     i = 0
     y_expected = 0
     for window in generator:
-        if i == generator.x_length * generator.y_length:
-            continue
+        # if i == generator.x_length * generator.y_length:
+        #     print("skipping", i, window.x, window.y)
+        #     continue
         # y = 0
         # if i < y_pred.shape[0] >= i:
         #     if y_pred[i] == 0:
@@ -142,24 +151,29 @@ def plot_overlap(y_test, y_pred, image_name, image_full_path, test_sat_image, ma
         # if y > 0:
         #     y_expected += 30 * 30
 
-        truth_mask[window.x, window.y] = y_test[i]
-        result_mask[window.x, window.y] = y_pred[i]
-        real_scale_show_mask[window.x_range, window.y_range] = y_pred[i]
+        # truth_mask[window.x, window.y] = y_test[i]
+        # result_mask[window.x, window.y] = y_pred[i]
+        full_scale_pred_mask[window.x_range, window.y_range] = y_pred[i]
+        full_scale_truth_mask[window.x_range, window.y_range] = y_test[i]
 
         i += 1
 
 
-    print("{} == {}".format(y_expected, len(result_mask[result_mask > 0])))
-    print("Total iterations", i)
+    result_mask = np.reshape(y_pred, generator.shape())
+    truth_mask = np.reshape(y_test, generator.shape())
+
+
+    # print("{} == {}".format(y_expected, len(result_mask[result_mask > 0])))
+    # print("Total iterations", i)
     # print("Y_matrix counts", np.unique(y_matrix, return_counts=True))
-    print("Counts:", np.unique(result_mask, return_counts=True))
-    print("result_mask[1s]", len(result_mask[result_mask == 1]))
-    print("result_mask[0s]", len(result_mask[result_mask == 0]))
+    # print("Counts:", np.unique(result_mask, return_counts=True))
+    # print("result_mask[1s]", len(result_mask[result_mask == 1]))
+    # print("result_mask[0s]", len(result_mask[result_mask == 0]))
 
     ds, img, bands = load_from_file(image_full_path, WORLDVIEW3)
     img = normalize_image(img, bands)
     rgb_img = get_rgb_bands(img, bands)
-    grayscale = get_grayscale_image(img, bands)
+    # grayscale = get_grayscale_image(img, bands)
 
     plt.figure()
     plt.axis('off')
@@ -168,7 +182,7 @@ def plot_overlap(y_test, y_pred, image_name, image_full_path, test_sat_image, ma
     # plt.imshow(grayscale, cmap='gray')
 
 
-    show_mask = np.ma.masked_where(real_scale_show_mask == 0, real_scale_show_mask)
+    show_mask = np.ma.masked_where(full_scale_pred_mask == 0, full_scale_pred_mask)
     plt.imshow(show_mask, cmap='jet', interpolation='none', alpha=1.0)
     # plt.title('Binary mask')
 
@@ -182,14 +196,24 @@ def plot_overlap(y_test, y_pred, image_name, image_full_path, test_sat_image, ma
     plt.savefig("{}/classification_jaccard_mask_results_{}_{}.png".format(results_path, image_name, current_time))
     plt.show()
 
-    print('Min {} Max {}'.format(result_mask.min(), result_mask.max()))
-    print('Len > 0: {}'.format(len(result_mask[result_mask > 0])))
-    print('Len == 0: {}'.format(len(result_mask[result_mask == 0])))
+    # print('Min {} Max {}'.format(result_mask.min(), result_mask.max()))
+    # print('Len > 0: {}'.format(len(result_mask[result_mask > 0])))
+    # print('Len == 0: {}'.format(len(result_mask[result_mask == 0])))
 
-    jaccard_index = jaccard_index_binary_masks(truth_mask, result_mask)
-    print("Jaccard index: {}".format(jaccard_index))
+    jaccard_index_main_window_scale = jaccard_index_binary_masks(truth_mask, result_mask)
+    jaccard_index_full_scale = jaccard_index_binary_masks(full_scale_truth_mask, full_scale_pred_mask)
 
-    return jaccard_index
+
+    # print("Jaccard index: {}".format(jaccard_index_main_window_scale))
+
+    return jaccard_index_main_window_scale, jaccard_index_full_scale
+
+def jaccard_similarity(y_truth, y_pred):
+    y_truth_slum = y_truth[y_truth == 1]
+    y_pred_slum = y_pred[y_truth == 1]
+
+    return np.intersect1d(y_truth_slum, y_pred_slum).size / np.union1d(y_truth_slum, y_pred_slum).size
+
 
 
 n_clusters = 32
@@ -232,22 +256,31 @@ def load_image(image_name):
 
 results = {}
 feature_names = [
-    # ("SIFT", (50, 100, 200, 300, 500)),
+    # ("LACUNARITY", (50, 100, 200, 300, 500)),
     # ("PANTEX", (50, 100, 200, 300, 500)),
-    ("LACUNARITY", (50, 100, 200, 300, 500)),
-    # ("TEXTON", (50, 100, 200, 300, 500))
+    # ("SIFT", (50, 100, 200, 300, 500)),
+    ("TEXTON", reversed((50, 100, 200, 300, 500))),
 ]
 
 cv_test = 0
+
 for feature_name, feature_scales in feature_names:
-    results_cols = ['cv_test', 'feature_name', 'classifier_name', 'classifier', 'feature_set', 'test_image', 'feature_scale', 'jaccard_index', 'accuracy', 'normalized_cnf']
+    results_cols = ['cv_test', 'feature_name', 'classifier_name', 'classifier', 'feature_set', 'test_image', 'feature_scale', 'jaccard_index', 'accuracy', 'precision', 'recall', 'normalized_cnf',]
     results_frame = pd.DataFrame(columns=results_cols)
 
-    for feature_scale in feature_scales:
+    df_path = '{root}/results/jaccard'.format(root=get_project_root())
+    csv_file = '{}/{}_df_optimization.csv'.format(df_path, feature_name)
+    if os.path.exists(csv_file):
+        results_frame = pd.read_csv(csv_file)
 
+    for feature_scale in generate_feature_scales(feature_scales):
+        print("Running feature scale: {}".format(feature_scale))
         for test_image, train_images in cv_train_test_split_images(images):
 
-            curr_feature_scales = ((feature_scale, feature_scale),)
+
+            print("test im:{} train_ims:{}".format(test_image, train_images))
+
+            curr_feature_scales = tuple((fc, fc) for fc in feature_scale)
             image_name = test_image
             mask_full_path = "{base_path}/{image_name}_masked.tif".format(base_path=base_path, image_name=image_name)
             test_image_loaded = load_image(test_image)
@@ -256,21 +289,31 @@ for feature_name, feature_scales in feature_names:
             feature_set = FeatureSet()
             if feature_name == "SIFT":
                 sift_clusters = sift_cluster(map(load_image, train_images))
-                sift = Sift(sift_clusters, windows=curr_feature_scales)
-                feature_set.add(sift, "SIFT")
+                for fc in feature_scale:
+                    sift = Sift(sift_clusters, windows=((fc, fc),))
+                    feature_set.add(sift)
                 cached = False
             if feature_name == "TEXTON":
                 texton_clusters = texton_cluster(map(load_image, train_images))
-                texton = Texton(texton_clusters, windows=curr_feature_scales)
-                feature_set.add(texton, "TEXTON")
+                for fc in feature_scale:
+                    texton = Texton(texton_clusters, windows=((fc, fc),))
+                    feature_set.add(texton)
                 cached = False
             if feature_name == "PANTEX":
-                pantex = Pantex(curr_feature_scales)
-                feature_set.add(pantex, "PANTEX")
+                for fc in feature_scale:
+                    pantex = Pantex(windows=((fc, fc),))
+                    feature_set.add(pantex)
             if feature_name == "LACUNARITY":
-                lacunarity = Lacunarity(windows=curr_feature_scales)
-                feature_set.add(lacunarity, "LACUNARITY")
+                for fc in feature_scale:
+                    lacunarity = Lacunarity(windows=((fc, fc),))
+                    feature_set.add(lacunarity)
 
+            if (
+                    ((results_frame['feature_set'] == str(feature_set)) &
+                    (results_frame['test_image'] == test_image)).any()
+                ):
+                print("Skipping {}".format(str(feature_set)))
+                continue
 
             # texton = create_texton_feature(sat_image, ((25, 25), (50, 50), (100, 100)), image_name, n_clusters=n_clusters, cached=True)
 
@@ -292,90 +335,132 @@ for feature_name, feature_scales in feature_names:
                                                                       class_ratio=class_ratio, bands=bands,
                                                                       cached=cached)
 
-            for classifier_name, classifier in generate_classifiers():
-                classifier.fit(X_train, y_train)
-                y_pred = classifier.predict(X_test)
+            for oversampler_name, oversampler in generate_oversamplers():
+                for classifier_name, classifier in generate_classifiers():
+                    print("Running clf: {} oversampler: {}".format(classifier_name, oversampler_name))
+                    if oversampler is not None:
+                        X_train_resampled, y_train_resampled = oversampler.fit_sample(X_train, y_train)
+                        classifier.fit(X_train_resampled, y_train_resampled)
+                    else:
+                        classifier.fit(X_train, y_train)
+                    y_pred = classifier.predict(X_test)
 
-                accuracy = accuracy_score(y_test, y_pred)
-                print("Accuracy: {}".format(accuracy))
-                current_time = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
+                    accuracy = accuracy_score(y_test, y_pred)
+                    recall = recall_score(y_test, y_pred)
+                    precision = precision_score(y_test, y_pred)
+                    f1 = f1_score(y_test, y_pred)
+                    matthews_score = matthews_corrcoef(y_test, y_pred)
+                    print("Oversampler {}, classifier {}".format(oversampler_name, classifier_name))
+                    print("Accuracy: {}".format(accuracy))
+                    print("matthews score: {}".format(matthews_score))
+                    print("precision: {}".format(precision))
+                    print("f1: {}".format(f1))
+                    current_time = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
 
-                cnf_matrix = confusion_matrix(y_test, y_pred)
-                cnf_matrix_normalized = cnf_matrix.astype('float') / cnf_matrix.sum(axis=1)[:, np.newaxis]
-                plot_confusion_matrix(cnf_matrix, classes=class_names,
-                                      title='Confusion matrix, without normalization')
-                plot_confusion_matrix(cnf_matrix, classes=class_names,
-                                      normalize=True,
-                                      title='Normalized confusion matrix')
+                    cnf_matrix = confusion_matrix(y_test, y_pred)
+                    cnf_matrix_normalized = cnf_matrix.astype('float') / cnf_matrix.sum(axis=1)[:, np.newaxis]
+                    plot_confusion_matrix(cnf_matrix, classes=class_names,
+                                          title='Confusion matrix, without normalization')
+                    plot_confusion_matrix(cnf_matrix, classes=class_names,
+                                          normalize=True,
+                                          title='Normalized confusion matrix')
 
-                # plots(classifier, X, y, groups, cv, cnf_matrix, show=show_plots, current_time=current_time, results_path=results_path)
-                image_file = "{base_path}/{image_name}.{extension}".format(
-                    base_path=base_path,
-                    image_name=image_name,
-                    extension=extension
-                )
-                jaccard_score = plot_overlap(y_test, y_pred, image_name, image_file, test_image_loaded, mask_full_path, main_window_size, current_time, results_path)
+                    # plots(classifier, X, y, groups, cv, cnf_matrix, show=show_plots, current_time=current_time, results_path=results_path)
+                    image_file = "{base_path}/{image_name}.{extension}".format(
+                        base_path=base_path,
+                        image_name=image_name,
+                        extension=extension
+                    )
+                    jaccard_score, jaccard_score_full_scale = plot_overlap(y_test, y_pred, image_name, image_file, test_image_loaded, mask_full_path, main_window_size, current_time, results_path)
 
-                # x_length = math.ceil(sat_image.shape[0] / main_window_size[0])
-                # y_length = math.ceil(sat_image.shape[1] / main_window_size[0])
-                # feature_mask_shape = (x_length, y_length)
+                    # x_length = math.ceil(sat_image.shape[0] / main_window_size[0])
+                    # y_length = math.ceil(sat_image.shape[1] / main_window_size[0])
+                    # feature_mask_shape = (x_length, y_length)
 
-                # y_real_mask = y.reshape(feature_mask_shape)
-                # y_pred_mask = y_pred.reshape(feature_mask_shape)
-                # mean_cv_score = np.mean(cv_results['test_score'])
+                    # y_real_mask = y.reshape(feature_mask_shape)
+                    # y_pred_mask = y_pred.reshape(feature_mask_shape)
+                    # mean_cv_score = np.mean(cv_results['test_score'])
 
-                save_path = "{}/classification_{}.json".format(results_path, current_time)
-                result_information = {
-                    'base_satellite_image': image_name,
-                    'classifier': str(classifier),
-                    'results': {
-                        # 'mean_cv_score': mean_cv_score,
+                    save_path = "{}/classification_{}.json".format(results_path, current_time)
+                    result_information = {
+                        'base_satellite_image': image_name,
+                        'classifier': str(classifier),
+                        'results': {
+                            # 'mean_cv_score': mean_cv_score,
+                            'accuracy': accuracy,
+                            'precision': precision,
+                            'recall': recall,
+                            # 'cv_results': {k: str(v) for k, v in cv_results.items()},
+                            'cnf_matrix': str(cnf_matrix),
+                            'jaccard_similarity_score': jaccard_score
+                        },
+                        'percentage_threshold': percentage_threshold,
+                        'features': feature_set.string_presentation(),
+                        'main_window_size': main_window_size,
+                        'class_ratio': class_ratio,
+                        'data_characteristics': {
+                            # 'X.shape': X_test.shape,
+                            # 'y.shape': y_test.shape,
+                            'y_test[1s]': len(y_test[y_test == 1]),
+                            'y_test[0s]': len(y_test[y_test == 0]),
+                            'X_train.shape': X_train.shape,
+                            'X_test.shape': X_test.shape,
+                            'y_train.shape': y_train.shape,
+                            'y_test.shape': y_test.shape,
+                        },
+                        'save_path': save_path,
+                        'classified_at': current_time,
+                    }
+
+                    # if best_score < mean_cv_score:
+                    #     best_score = mean_cv_score
+                    #     best_result = result_information
+
+                    if oversampler is not None:
+                        nr_train_examples = y_train_resampled.shape[0]
+                        nr_train_non_slum_examples = y_train_resampled[y_train_resampled == 0].shape[0]
+                        nr_train_slum_examples = y_train_resampled[y_train_resampled == 1].shape[0]
+                    else:
+                        nr_train_examples = y_train.shape[0]
+                        nr_train_non_slum_examples = y_train[y_train == 0].shape[0]
+                        nr_train_slum_examples = y_train[y_train == 1].shape[0]
+
+                    results_row = pd.Series({
+                        'cv_test': cv_test,
+                        'feature_name': feature_name,
+                        'classifier_name': classifier_name,
+                        'classifier': str(classifier),
+                        'feature_set': str(feature_set),
+                        'test_image': test_image,
+                        'train_ims': train_images,
+                        'feature_scale': curr_feature_scales,
+                        'jaccard_index': jaccard_score,
+                        'jaccard_index_full_scale': jaccard_score_full_scale,
                         'accuracy': accuracy,
-                        # 'cv_results': {k: str(v) for k, v in cv_results.items()},
-                        'cnf_matrix': str(cnf_matrix),
-                        'jaccard_similarity_score': jaccard_score
-                    },
-                    'percentage_threshold': percentage_threshold,
-                    'features': feature_set.string_presentation(),
-                    'main_window_size': main_window_size,
-                    'class_ratio': class_ratio,
-                    'data_characteristics': {
-                        # 'X.shape': X_test.shape,
-                        # 'y.shape': y_test.shape,
-                        'y_test[1s]': len(y_test[y_test == 1]),
-                        'y_test[0s]': len(y_test[y_test == 0]),
-                        'X_train.shape': X_train.shape,
-                        'X_test.shape': X_test.shape,
-                        'y_train.shape': y_train.shape,
-                        'y_test.shape': y_test.shape,
-                    },
-                    'save_path': save_path,
-                    'classified_at': current_time,
-                }
+                        'f1_score': f1,
+                        'matthews_score': matthews_score,
+                        'precision': precision,
+                        'recall': recall,
+                        'normalized_cnf': cnf_matrix_normalized,
+                        'oversampled': oversampler is not None,
+                        'oversampler': oversampler,
+                        'oversampler_name': oversampler_name,
+                        'train_examples': nr_train_examples,
+                        'train_non-slum_examples': nr_train_non_slum_examples,
+                        'train_slum_examples': nr_train_slum_examples,
+                        'test_examples': y_test.shape[0],
+                        'test_non-slum_examples': y_test[y_test == 0].shape[0],
+                        'test_slum_examples': y_test[y_test == 1].shape[0],
+                        'main_window_size': main_window_size,
+                        'current_time': current_time,
+                    })
+                    save_classification_results(result_information, save_path)
+                    results_frame = results_frame.append(results_row, ignore_index=True)
+                    print(results_frame)
 
-                # if best_score < mean_cv_score:
-                #     best_score = mean_cv_score
-                #     best_result = result_information
-
-                save_classification_results(result_information, save_path)
-                results_row = pd.Series({
-                    'cv_test': cv_test,
-                    'feature_name': feature_name,
-                    'classifier_name': classifier_name,
-                    'classifier': str(classifier),
-                    'feature_set': str(feature_set),
-                    'test_image': test_image,
-                    'feature_scale': curr_feature_scales,
-                    'jaccard_index': jaccard_score,
-                    'accuracy': accuracy,
-                    'normalized_cnf': cnf_matrix_normalized,
-                })
-                results_frame = results_frame.append(results_row, ignore_index=True)
-                print(results_frame)
-
-                df_path = '{root}/results/jaccard'.format(root=get_project_root())
-                results_frame.to_csv('{}/{}_df_optimization.csv'.format(df_path, feature_name))
-                print("Written frame to '{}'".format(df_path))
+                    df_path = '{root}/results/jaccard'.format(root=get_project_root())
+                    results_frame.to_csv('{}/{}_df_optimization.csv'.format(df_path, feature_name))
+                    print("Written frame to '{}'".format(df_path))
         cv_test += 1
 
 

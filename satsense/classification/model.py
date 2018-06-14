@@ -1,7 +1,13 @@
 import itertools
+import json
+import os
+import time
 
 import gdal
 import numpy as np
+from imblearn.over_sampling import RandomOverSampler, SMOTE, ADASYN
+
+from satsense.extract import extract_features_conc, extract_features_futur, extract_features_futur2
 
 from satsense import SatelliteImage, extract_features
 from satsense.bands import MASK_BANDS, WORLDVIEW3
@@ -56,7 +62,8 @@ def get_y_vector(binary_file_path: str, smallest_window_size: tuple, percentage_
         real_mask[window.x_range, window.y_range, 0] = y
 
     y_train = y_matrix.flatten()
-    cache(y_train, "y_train")
+    if cached:
+        cache(y_train, "y_train")
 
     return y_train, real_mask
 
@@ -66,7 +73,7 @@ def get_x_matrix(sat_image: SatelliteImage, image_name, feature_set, window_size
     # image_file = "/home/max/Documents/ai/scriptie/data/%s.TIF" % image_name
 
     feature_string = feature_set.string_presentation()
-    cache_key = "x_train-{0}-{1}-{2}".format(image_name, str(window_size), feature_string)
+    cache_key = "X-{0}-{1}-{2}".format(image_name, str(window_size), feature_string)
 
     if cached:
         X = load_cache(cache_key)
@@ -78,13 +85,19 @@ def get_x_matrix(sat_image: SatelliteImage, image_name, feature_set, window_size
     # bands = WORLDVIEW2
     # sat_image = SatelliteImage.load_from_file(image_file, bands)
 
-    generator = CellGenerator(image=sat_image, size=window_size)
 
     # Calculate PANTEX feature for satellite image
     # Calculates Z features, resulting dimensions is:
     # [M x N x Z], where 0,0,: are the features of the first block
     # In this case we have 1 feature per block
-    calculated_features = extract_features(feature_set, generator, image_name=image_name, load_cached=cached)
+
+    # start = time.time()
+    # calculated_features = extract_features(feature_set, generator, image_name=image_name, load_cached=cached)
+    # end = time.time()
+    # print("Elapsed time extract {}".format(end - start))
+
+    generator = CellGenerator(image=sat_image, size=window_size)
+    calculated_features = extract_features_futur2(feature_set, generator, image_name=image_name, load_cached=cached)
 
     if len(calculated_features.shape) == 3:
         nrows = calculated_features.shape[0] * calculated_features.shape[1]
@@ -130,11 +143,12 @@ def balance_dataset(X: np.ndarray, y: np.ndarray, class_ratio=1.3):
 
 
 def create_models(images, feature_set: FeatureSet, base_data_path, extension='tif', main_window_size=(30, 30),
-                  percentage_threshold=0.5, class_ratio=1.3, bands=WORLDVIEW3):
+                  percentage_threshold=0.5, class_ratio=1.3, bands=WORLDVIEW3, cached=True):
     """
     Yields models, a tuple of (X vector, y vector, real_mask image) for various images
     Also yields a grouped model of all images for classification use
 
+    :param cached:
     :param images:
     :param feature_set:
     :param base_data_path:
@@ -155,9 +169,9 @@ def create_models(images, feature_set: FeatureSet, base_data_path, extension='ti
         sat_image = SatelliteImage.load_from_file(image_file, bands)
 
         X = get_x_matrix(sat_image, image_name=image_name, feature_set=feature_set, window_size=main_window_size,
-                         cached=True)
+                         cached=cached)
         y, real_mask = get_y_vector(mask_full_path, main_window_size, percentage_threshold, cached=False)
-        X, y = balance_dataset(X, y, class_ratio=class_ratio)
+        # X, y = balance_dataset(X, y, class_ratio=class_ratio)
 
         print("X shape {}, y shape {}".format(X.shape, y.shape))
         image_vars = (X, y, real_mask, np.full(y.shape, group_num))
@@ -170,7 +184,6 @@ def create_models(images, feature_set: FeatureSet, base_data_path, extension='ti
         groups = np.full(base_y.shape, group_num)
         print("X shape {}, y shape {}".format(base_X.shape, base_y.shape))
         for X, y, _, im_groups in data[1:]:
-
             base_X = np.append(base_X, X, axis=0)
             base_y = np.append(base_y, y, axis=0)
             groups = np.append(groups, im_groups, axis=0)
@@ -192,6 +205,7 @@ def create_sift_feature(sat_image: SatelliteImage, window_sizes, image_name, n_c
     feature = Sift(kmeans, windows=(window_sizes))
 
     return feature
+
 
 def create_texton_feature(sat_image: SatelliteImage, window_sizes, image_name, n_clusters=32, cached=True) -> Texton:
     cache_key = "kmeans-texton-{}".format(image_name)
@@ -218,6 +232,10 @@ def generate_tests(features, classifiers=None):
             yield (fs, cl)
 
 
+def generate_classifiers():
+    return all_classifiers()
+
+
 def generate_feature_sets(features):
     """
     Yields all possible combinations of features, of size 1 - len(features)
@@ -235,9 +253,34 @@ def generate_feature_sets(features):
             yield feature_set
 
 
-def train_test_split_images(images):
+def cv_train_test_split_images(images):
     im_set = set(images)
-    for train_image in images:
-        test_images = im_set.difference(set(train_image))
+    for test_image in images:
+        train_images = im_set.difference({test_image})
 
-        yield (train_image, test_images)
+        yield (test_image, train_images)
+
+
+def save_classification_results(results, save_path):
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with open(save_path, 'w') as fp:
+        json.dump(results, fp, indent=4)
+
+
+def generate_feature_scales(feature_scales):
+    # combi_sizes = reversed(range(1, len(feature_scales) + 1))
+    combi_sizes = (3,)
+
+    # !yield all possible scale combinations
+    for combi_size in combi_sizes:
+        combis = itertools.combinations(feature_scales, combi_size)
+        yield from combis
+
+
+def generate_oversamplers():
+    return [
+        # ('RandomOversampler', RandomOverSampler(random_state=0)),
+        ('SMOTE', SMOTE(n_jobs=-1)),
+        # ('ADASYN', ADASYN(n_jobs=-1)),
+        (None, None),
+    ]

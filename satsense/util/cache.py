@@ -44,11 +44,17 @@ def load_cached_model(filename: str):
 
 
 def cache(array, filename):
-    dir_path = cache_path()
-    if not os.path.isdir(dir_path):
-        os.mkdir(dir_path)
+    try:
+        dir_path = cache_path()
+        if not os.path.isdir(dir_path):
+            os.mkdir(dir_path)
 
-    np.save(dir_path + '/' + filename + ".npy", array)
+        print("Cached: {}".format(filename))
+        np.save(dir_path + '/' + filename + ".npy", array)
+    except OSError:
+        print("Cannot cache - to long filename")
+        pass
+
 
 
 def load_cache(filename):
@@ -57,6 +63,7 @@ def load_cache(filename):
     if not os.path.exists(full_file_path):
         return None
 
+    print("Loaded cached: {}".format(filename))
     return np.load(full_file_path)
 
 
@@ -123,6 +130,7 @@ def cache_calculated_features(features, image_name, to_cache, window_size):
             dir_path=dir_path,
             cache_key=feature_cache_key,
         )
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
 

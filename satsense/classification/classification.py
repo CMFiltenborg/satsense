@@ -324,7 +324,7 @@ images = [
     'section_3',
 ]
 show_plots = False
-results_path = '{root}/results'.format(root=get_project_root())
+results_path = '{root}/results'.format(root=get_project_root('../../'))
 base_path = data_path()
 extension = 'tif'
 main_window_size = (30, 30)

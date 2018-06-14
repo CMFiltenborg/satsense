@@ -11,19 +11,29 @@ import sys
 import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
+plt.switch_backend('agg')
+from satsense.util.path import data_path, get_project_root
 from scipy.stats import norm
 from sklearn.neighbors import KernelDensity
 from scipy import stats, integrate
 
 sns.set(color_codes=True)
+sns.set_context("paper")
+
+current_palette = sns.color_palette("Blues")
+sns.set_palette(current_palette)
+sns.set(style="whitegrid", rc={'legend.frameon':True})
 
 feature_window_sizes = [(25, 25), (50, 50), (100, 100), (200, 200), (300, 300)]
+feature_window_sizes = [(200, 200)]
 # feature_window_sizes = [(100, 100), (200, 200), (300, 300)]
-feature_name = 'lacunarity'
+feature_name = 'pantex'
 
 main_window_size = (30, 30)
-base_path = "/home/max/Documents/ai/scriptie/data/Clip"
-results_path = "/home/max/Documents/ai/scriptie/satsense/results"
+base_path = data_path()
+
+results_path = '{root}/results'.format(root=get_project_root())
+
 extension = 'tif'
 balanced = True
 images = [
@@ -37,11 +47,13 @@ bands = WORLDVIEW3
 
 def plot_boxplot(X, y, image_name, plot_title, feature_name="pantex"):
     df = pd.DataFrame({'X': X.ravel(), 'y': y})
-    df['y'] = df['y'].map(lambda x: "Slum" if x == 1 else "Non-slum")
-    sns.boxplot(x='y', y='X', data=df)
-
+    df['class'] = df['y'].map(lambda x: "Slum" if x == 1 else "Non-slum")
+    df[feature_name] = df['X']
     plt.figure()
-    plt.title(plot_title)
+    # plt.title(plot_title)
+    # plt.axis('off')
+    sns.boxplot(x='class', y=feature_name, data=df)
+
     if balanced:
         plt.savefig(results_path + "/{feature_name}/boxplot_balanced_{image_name}_{plot_title}.png".format(
             image_name=image_name,
@@ -107,17 +119,17 @@ for i, image_name in enumerate(images):
 
     for j, window_size in enumerate(feature_window_sizes):
         for box_size in (10, 20, 30):
-            # plot_title = 'GLCM PanTex with window {}'.format(window_size)
-            plot_title = 'Lacunarity with window {} with box_size {}'.format(window_size, box_size)
+            plot_title = 'GLCM PanTex with window {}'.format(window_size)
+            # plot_title = 'Lacunarity with window {} with box_size {}'.format(window_size, box_size)
             feature_set = FeatureSet()
             feature_sizes = (window_size,)
-            lacunarity = Lacunarity(feature_sizes, (box_size,))
-            feature_set.add(lacunarity)
+            # lacunarity = Lacunarity(feature_sizes, (box_size,))
+            # feature_set.add(lacunarity)
 
-            # pantex = Pantex(feature_sizes)
-            # feature_set.add(pantex, "PANTEX")
+            pantex = Pantex(feature_sizes)
+            feature_set.add(pantex, "PANTEX")
 
-            X = get_x_matrix(sat_image=sat_image, feature_set=feature_set, window_size=main_window_size, cached=False,
+            X = get_x_matrix(sat_image=sat_image, feature_set=feature_set, window_size=main_window_size, cached=True,
                              image_name=image_name)
             y, _ = get_y_vector(mask_full_path, main_window_size, percentage_threshold=0.5, cached=False)
             if balanced:

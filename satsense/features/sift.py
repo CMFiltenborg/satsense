@@ -1,11 +1,12 @@
 import numpy as np
 import scipy as sp
 import cv2
+
+from satsense.generators import CellGenerator
 from satsense import SatelliteImage
+from satsense.generators.cell_generator import super_cell
 from .feature import Feature
-from sklearn.cluster import KMeans, MiniBatchKMeans
-from sklearn.preprocessing import MinMaxScaler
-from numba import jit
+from sklearn.cluster import MiniBatchKMeans
 from typing import Iterator
 
 def sift_cluster(sat_images: Iterator[SatelliteImage], n_clusters=32, sample_size=100000) -> MiniBatchKMeans:
@@ -31,6 +32,37 @@ def sift_cluster(sat_images: Iterator[SatelliteImage], n_clusters=32, sample_siz
     return mbkmeans
 
 
+def sift_for_chunk(chunk, kmeans, normalized=True):
+    chunk_len = len(chunk)
+    cluster_count = kmeans.n_clusters
+    sift_obj = cv2.xfeatures2d.SIFT_create()
+
+    coords = np.zeros((chunk_len, 2))
+    chunk_matrix = np.zeros((chunk_len, cluster_count), dtype=np.float64)
+    for i in range(chunk_len):
+        coords[i, :] = chunk[i][0:2]
+
+        win_gray_ubyte = chunk[i][2]
+
+        kp, descriptors = sift_obj.detectAndCompute(win_gray_ubyte, None)
+        del kp  # Free up memory
+
+        if descriptors is None:
+            chunk_matrix[i, :] = np.zeros((cluster_count), dtype=np.int32)
+            continue
+
+        codewords = kmeans.predict(descriptors)
+        counts = np.bincount(codewords, minlength=cluster_count)
+
+        # Perform normalization
+        if normalized:
+            counts = counts / cluster_count
+
+        chunk_matrix[i, :] = counts
+
+    return coords, chunk_matrix
+
+
 class Sift(Feature):
     def __init__(self, kmeans: MiniBatchKMeans, windows=((25, 25),), normalized=True):
         super(Sift, self)
@@ -40,19 +72,32 @@ class Sift(Feature):
         self.sift_obj = cv2.xfeatures2d.SIFT_create()
         self.normalized = normalized
 
-    def __call__(self, cell):
-        result = np.zeros(self.feature_size)
-        n_clusters = self.kmeans.n_clusters
-        for i, window in enumerate(self.windows):
-            win = cell.super_cell(window, padding=True)
-            start_index = i * n_clusters
-            end_index = (i + 1) * n_clusters
-            result[start_index: end_index] = self.sift(win.gray_ubyte, self.kmeans)
-        return result
+    def __call__(self, chunk):
+        return sift_for_chunk(chunk, self.kmeans, self.normalized)
+
+        # result = np.zeros(self.feature_size)
+        # n_clusters = self.kmeans.n_clusters
+        # for i, window in enumerate(self.windows):
+        #     win = cell.super_cell(window, padding=True)
+        #     start_index = i * n_clusters
+        #     end_index = (i + 1) * n_clusters
+        #     result[start_index: end_index] = self.sift(win.gray_ubyte, self.kmeans)
+        # return result
 
     def __str__(self):
-        normalized = "normalized" if self.normalized == True else "not-normalized"
-        return "Sift-{}-{}".format(str(self.windows), normalized)
+        normalized = "n" if self.normalized == True else "nn"
+        return "Si-{}{}".format(str(self.windows), normalized)
+
+
+    def initialize(self, generator: CellGenerator):
+        data = []
+        for window in generator:
+            for scale in self.windows:
+                win_gray_ubyte, _, _ = super_cell(generator.image.gray_ubyte, scale, window.x_range, window.y_range, padding=False)
+                processing_tuple = (window.x, window.y, win_gray_ubyte)
+                data.append(processing_tuple)
+
+        return data
 
 
     def sift(self, window_gray_ubyte, kmeans: MiniBatchKMeans):
