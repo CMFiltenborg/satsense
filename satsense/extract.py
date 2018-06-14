@@ -13,44 +13,11 @@ from satsense.generators import CellGenerator
 from satsense.util.cache import load_cache, cache
 
 
-def extract_features(features: FeatureSet, generator: CellGenerator, load_cached=True, image_name=""):
-    start = time.time()
-    shape = generator.shape()
-
-    shared_feature_matrix = np.zeros((shape[0], shape[1], 1))
-    print("\n--- Calculating Feature vector: {} ---\n".format(shared_feature_matrix.shape))
-
-    for name, feature in iteritems(features.items):
-        key = "feature-{feature}-window{window}-image-{image_name}".format(
-            image_name=image_name,
-            window=(generator.x_size, generator.y_size),
-            feature=str(feature),
-        )
-
-        feature_matrix = None
-        if "Te-" not in str(feature):
-            feature_matrix = load_cache(key)
-
-        if feature_matrix is None:
-            feature_matrix = compute_feature(feature, generator)
-
-            cache(feature_matrix, key)
-
-        print(shared_feature_matrix.shape, feature_matrix.shape)
-        shared_feature_matrix = np.append(shared_feature_matrix, feature_matrix, axis=2)
-
-        # Dirty fix. Would be better to re-use the windows every time so that
-        # the windows do not have to be recalculated
-        # (generator can only be iterated over once)
-        generator = CellGenerator(generator.image, (generator.x_size, generator.y_size))
-
-    end = time.time()
-    print("Elapsed time extract multiprocessing: {} minutes, start: {}, end: {}".format((end - start) / 60, start, end))
-
-    return shared_feature_matrix
-
-
 def timing(f):
+    """
+    Decorator to time function in minutes
+    """
+
     def wrap(*args):
         time1 = time.time()
         ret = f(*args)
@@ -62,11 +29,52 @@ def timing(f):
 
 
 @timing
+def extract_features(features: FeatureSet, generator: CellGenerator, load_cached=True, image_name=""):
+    start = time.time()
+    shape = generator.shape()
+
+    shared_feature_matrix = np.zeros((shape[0], shape[1], 1))
+    print("\n--- Calculating Feature vector: {} ---\n".format(shared_feature_matrix.shape))
+
+    for name, feature in iteritems(features.items):
+        cache_key = "feature-{feature}-window{window}-image-{image_name}".format(
+            image_name=image_name,
+            window=(generator.x_size, generator.y_size),
+            feature=str(feature),
+        )
+
+        feature_matrix = None
+        if "Te-" not in str(feature):
+            feature_matrix = load_cache(cache_key)
+
+        if feature_matrix is None:
+            feature_matrix = compute_feature(feature, generator)
+            cache(feature_matrix, cache_key)
+
+        if shared_feature_matrix:
+            shared_feature_matrix = np.append(shared_feature_matrix, feature_matrix, axis=2)
+        else:
+            shared_feature_matrix = feature_matrix
+
+            # Dirty fix. Would be better to re-use the windows every time so that
+        # the windows do not have to be recalculated
+        # (generator can only be iterated over once)
+        generator = CellGenerator(generator.image, (generator.x_size, generator.y_size))
+
+    end = time.time()
+    print("Elapsed time extract multiprocessing: {} minutes, start: {}, end: {}".format((end - start) / 60, start, end))
+
+    return shared_feature_matrix
+
+
+@timing
 def compute_feature(feature, generator):
     print("\n--- Calculating feature: {} ---\n".format(feature))
 
     start = time.time()
 
+    shape = generator.shape()
+    scales_feature_matrix = None
     # Calculate for different scales separately.
     for scale in feature.windows:
         # Prepare data for multiprocessing of individual features
@@ -78,7 +86,6 @@ def compute_feature(feature, generator):
 
         end = time.time()
         print("Preparing data cells took {} seconds".format((end - start)))
-        shape = generator.shape()
 
         chunk_size = shape[0]
         cpu_cnt = cpu_count()
@@ -98,13 +105,22 @@ def compute_feature(feature, generator):
         p.close()
         p.join()
 
-        feature_matrix = np.zeros((shape[0], shape[1], feature.feature_size))
-
         # Load individual results of processing back into one matrix
+        feature_matrix = np.zeros((shape[0], shape[1], feature.feature_size))
         for coords, chunk_matrix in processing_results:
             load_results_into_matrix(feature_matrix, coords, chunk_matrix)
 
-    return feature_matrix
+        if scales_feature_matrix:
+            scales_feature_matrix = np.append(scales_feature_matrix, feature_matrix, axis=2)
+        else:
+            scales_feature_matrix = feature_matrix
+
+        # Dirty fix. Would be better to re-use the windows every time so that
+        # the windows do not have to be recalculated
+        # (generator can only be iterated over once)
+        generator = CellGenerator(generator.image, (generator.x_size, generator.y_size))
+
+    return scales_feature_matrix
 
 
 @njit
@@ -129,6 +145,6 @@ def compute_chunk(chunk, feature):
     print(
         "Calculating {} Windows took {} seconds,"
         " each window took: {} (avg), mem:{}".format(len(chunk), delta, per_block,
-                                            mem_usage))
+                                                     mem_usage))
 
     return result
