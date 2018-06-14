@@ -10,6 +10,7 @@ from .feature import Feature
 from satsense.generators import CellGenerator
 from satsense.generators.cell_generator import super_cell
 
+
 def sift_cluster(sat_images: Iterator[SatelliteImage],
                  n_clusters=32,
                  sample_size=100000) -> MiniBatchKMeans:
@@ -73,7 +74,7 @@ class Sift(Feature):
 
     def __init__(self,
                  kmeans: MiniBatchKMeans,
-                 windows=((25, 25), ),
+                 windows=((25, 25),),
                  normalized=True):
         """Create sift feature."""
         super(Sift, self)
@@ -90,35 +91,12 @@ class Sift(Feature):
         normalized = "n" if self.normalized == True else "nn"
         return "Si-{}{}".format(str(self.windows), normalized)
 
-
     def initialize(self, generator: CellGenerator, scale):
         data = []
         for window in generator:
-            win_gray_ubyte, _, _ = super_cell(generator.image.gray_ubyte, scale, window.x_range, window.y_range, padding=False)
+            win_gray_ubyte, _, _ = super_cell(generator.image.gray_ubyte, scale, window.x_range, window.y_range,
+                                              padding=False)
             processing_tuple = (window.x, window.y, win_gray_ubyte)
             data.append(processing_tuple)
 
         return data
-
-
-    def sift(self, window_gray_ubyte, kmeans: MiniBatchKMeans):
-        """
-        Calculate the sift feature on the given window
-        """
-        kp, descriptors = self.sift_obj.detectAndCompute(window_gray_ubyte, None)
-        del kp  # Free up memory
-
-
-        # Is none if no descriptors are found, i.e. on 0 input range
-        cluster_count = kmeans.n_clusters
-        if descriptors is None:
-            return np.zeros((cluster_count), dtype=np.int32)
-
-        codewords = kmeans.predict(descriptors)
-        counts = np.bincount(codewords, minlength=cluster_count)
-
-        # Perform normalization
-        if self.normalized:
-            counts = counts / cluster_count
-
-        return counts

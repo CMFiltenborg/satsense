@@ -1,4 +1,5 @@
 """Texton feature implementation."""
+from functools import lru_cache
 from typing import Iterator
 
 import numpy as np
@@ -6,18 +7,10 @@ from scipy import ndimage
 from skimage.filters import gabor_kernel, gaussian
 from sklearn.cluster import MiniBatchKMeans
 
-from .. import SatelliteImage
-from ..generators.cell_generator import Cell
-from .feature import Feature
-
-from typing import List, Iterator
-from satsense import SatelliteImage, WORLDVIEW3
+from satsense import SatelliteImage
 from satsense.generators import CellGenerator
-from satsense.generators.cell_generator import Cell, super_cell
+from satsense.generators.cell_generator import super_cell
 from .feature import Feature
-from sklearn.cluster import MiniBatchKMeans
-from scipy import ndimage as ndi
-from functools import lru_cache
 
 
 def texton_cluster(sat_images: Iterator[SatelliteImage],
@@ -68,11 +61,9 @@ def create_kernels():
 
 def get_texton_descriptors(image):
     """Compute texton descriptors."""
-    print("Computing texton descriptors for image with shape {}"
-          .format(image.shape))
     kernels = create_kernels()
     length = len(kernels) + 1
-    descriptors = np.zeros(image.shape + (length, ), dtype=np.double)
+    descriptors = np.zeros(image.shape + (length,), dtype=np.double)
     for k, kernel in enumerate(kernels):
         descriptors[:, :, k] = ndimage.convolve(image, kernel, mode='wrap')
 
@@ -91,9 +82,6 @@ def texton_for_chunk(chunk, kmeans, normalized=True):
     chunk_matrix = np.zeros((chunk_len, cluster_count))
     for i in range(chunk_len):
         coords[i, :] = chunk[i][0:2]
-
-        # sub_descriptors = chunk[i][2]
-        # sub_descriptors = sub_descriptors.reshape((sub_descriptors.shape[0] * sub_descriptors.shape[1], sub_descriptors.shape[2]))
 
         im_grayscale = chunk[i][2]
         sub_descriptors = get_texton_descriptors(im_grayscale)
@@ -127,42 +115,6 @@ class Texton(Feature):
         self.normalized = normalized
         self.descriptors = None
 
-    def __call__(self, cell):
-        result = np.zeros(self.feature_size)
-        n_clusters = self.kmeans.n_clusters
-        for i, window in enumerate(self.windows):
-            win = cell.super_cell(window, padding=True)
-            start_index = i * n_clusters
-            end_index = (i + 1) * n_clusters
-            result[start_index:end_index] = self.texton(win)
-        return result
-
-    def __str__(self):
-        normalized = "normalized" if self.normalized else "not-normalized"
-        return "Texton1-dog-{}-{}".format(str(self.windows), normalized)
-
-    def initialize(self, sat_image: SatelliteImage):
-        """Compute texton descriptors for the image."""
-        self.descriptors = get_texton_descriptors(sat_image.grayscale)
-
-    def texton(self, window: Cell):
-        """Calculate the texton feature on the given window."""
-        cluster_count = self.kmeans.n_clusters
-
-        descriptors = self.descriptors[window.x_range, window.y_range, :]
-        shape = descriptors.shape
-        descriptors = descriptors.reshape(shape[0] * shape[1], shape[2])
-
-        codewords = self.kmeans.predict(descriptors)
-        counts = np.bincount(codewords, minlength=cluster_count)
-
-        # Perform normalization
-        if self.normalized:
-            counts = counts / cluster_count
-
-        return counts
-        self.descriptors = None
-
     def __call__(self, chunk):
         return texton_for_chunk(chunk, self.kmeans, self.normalized)
 
@@ -171,7 +123,6 @@ class Texton(Feature):
         return "Te-{}-{}".format(str(self.windows), normalized)
 
     def chunk_size(self, cpu_cnt, im_shape):
-        # return int(math.ceil(im_shape[0] * im_shape[1] / cpu_cnt))
         return im_shape[0]
 
     def initialize(self, generator: CellGenerator, scale):
@@ -184,4 +135,3 @@ class Texton(Feature):
             data.append(processing_tuple)
 
         return data
-

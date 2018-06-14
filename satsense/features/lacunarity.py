@@ -2,10 +2,9 @@
 import numpy as np
 from numba import jit, prange
 
-from . import Feature
 from satsense.generators import CellGenerator
 from satsense.generators.cell_generator import super_cell
-from satsense.image import SatelliteImage
+from . import Feature
 
 
 # @jit("float64(boolean[:, :], int64)", nopython=True, parallel=True)
@@ -56,10 +55,10 @@ def lacunarity_for_chunk(chunk, box_sizes):
     return coords, chunk_matrix
 
 
-
 class Lacunarity(Feature):
     """Lacunarity feature."""
-    def __init__(self, windows=((25, 25), ), box_sizes=(10, 20, 30)):
+
+    def __init__(self, windows=((25, 25),), box_sizes=(10, 20, 30)):
         # Check input
         for window in windows:
             for box_size in box_sizes:

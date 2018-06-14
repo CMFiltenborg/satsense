@@ -6,7 +6,6 @@ from satsense.generators import CellGenerator
 from satsense.generators.cell_generator import super_cell
 from .feature import Feature
 
-import warnings
 
 def get_rii_dist_angles():
     """
@@ -99,9 +98,8 @@ def pantex(window, maximum=255):
     return pan.min()
 
 
-def pantex_for_chunk(chunk, maximum=255):
+def pantex_for_chunk(chunk):
     chunk_len = len(chunk)
-    offsets = get_rii_dist_angles()
 
     coords = np.zeros((chunk_len, 2))
     chunk_matrix = np.zeros((chunk_len, 1), dtype=np.float64)
@@ -109,26 +107,13 @@ def pantex_for_chunk(chunk, maximum=255):
         coords[i, :] = chunk[i][0:2]
         win_gray_ubyte = chunk[i][2]
 
-        pan = np.zeros(len(offsets))
-
-        pan = np.zeros(len(offsets))
-        for i, offset in enumerate(offsets):
-            glcm = greycomatrix(
-                window, [offset[0]], [offset[1]],
-                symmetric=True,
-                normed=True,
-                levels=maximum + 1)
-            pan[i] = greycoprops(glcm, 'contrast')
-
-        chunk_matrix[i] = pan.min()
+        chunk_matrix[i] = pantex(win_gray_ubyte)
 
     return coords, chunk_matrix
 
 
-
-
 class Pantex(Feature):
-    def __init__(self, windows=((25, 25), )):
+    def __init__(self, windows=((25, 25),)):
         super(Pantex, self)
         self.windows = windows
         self.feature_size = len(self.windows)
@@ -139,7 +124,8 @@ class Pantex(Feature):
     def initialize(self, generator: CellGenerator, scale):
         data = []
         for window in generator:
-            win_gray_ubyte, _, _ = super_cell(generator.image.gray_ubyte, scale, window.x_range, window.y_range, padding=True)
+            win_gray_ubyte, _, _ = super_cell(generator.image.gray_ubyte, scale, window.x_range, window.y_range,
+                                              padding=True)
             processing_tuple = (window.x, window.y, win_gray_ubyte)
             data.append(processing_tuple)
 
