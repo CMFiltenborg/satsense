@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from sklearn.cluster import MiniBatchKMeans
 
-from .. import SatelliteImage
+from ..image import SatelliteImage
 from .feature import Feature
 from satsense.generators import CellGenerator
 from satsense.generators.cell_generator import super_cell
@@ -84,6 +84,10 @@ class Sift(Feature):
         self.sift_obj = cv2.xfeatures2d.SIFT_create()
         self.normalized = normalized
 
+    @property
+    def cached(self):
+        return True
+
     def __call__(self, chunk):
         return sift_for_chunk(chunk, self.kmeans, self.normalized)
 
@@ -91,7 +95,8 @@ class Sift(Feature):
         normalized = "n" if self.normalized == True else "nn"
         return "Si-{}{}".format(str(self.windows), normalized)
 
-    def initialize(self, generator: CellGenerator, scale):
+    @staticmethod
+    def initialize(generator: CellGenerator, scale):
         data = []
         for window in generator:
             win_gray_ubyte, _, _ = super_cell(generator.image.gray_ubyte, scale, window.x_range, window.y_range,

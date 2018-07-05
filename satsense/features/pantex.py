@@ -121,7 +121,12 @@ class Pantex(Feature):
     def __call__(self, chunk):
         return pantex_for_chunk(chunk)
 
-    def initialize(self, generator: CellGenerator, scale):
+    @property
+    def cached(self):
+        return True
+
+    @staticmethod
+    def initialize(generator: CellGenerator, scale):
         data = []
         for window in generator:
             win_gray_ubyte, _, _ = super_cell(generator.image.gray_ubyte, scale, window.x_range, window.y_range,

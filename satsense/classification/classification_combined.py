@@ -25,6 +25,7 @@ from satsense.classification.model import create_models, cv_train_test_split_ima
     save_classification_results, generate_classifiers, generate_feature_scales, generate_oversamplers
 from satsense.performance import jaccard_index_binary_masks
 import pandas as pd
+from sklearn.preprocessing import RobustScaler
 
 
 def load_from_file(path, bands):
@@ -256,15 +257,26 @@ def load_image(image_name):
 
 results = {}
 feature_names = [
-    ("LACUNARITY", (100, 200, 300, 500)),
-    # ("PANTEX", (50, 100, 200, 300, 500)),
-    # ("SIFT", (50, 100, 200, 300, 500)),
-    # ("TEXTON", reversed((50, 100, 200, 300, 500))),
+    ("LACUNARITY", (50, 300, 500)),
+    ("PANTEX", (100, 300, 500)),
+    ("SIFT", (100, 200, 300)),
+    ("TEXTON", (50, 100, 200)),
 ]
+
+# feature_names = [
+#     ("LACUNARITY", (50,)),
+    # ("PANTEX", (100,)),
+    # ("SIFT", (100,)),
+    # ("TEXTON", (50,)),
+# ]
+scaler_name = "RobustScaler"
+scaled = True
 
 cv_test = 0
 
-for feature_name, feature_scales in feature_names:
+# for feature_name, feature_scales in feature_names:
+for n in (0,):
+    feature_name = "ALL"
     results_cols = ['cv_test', 'feature_name', 'classifier_name', 'classifier', 'feature_set', 'test_image', 'feature_scale', 'jaccard_index', 'accuracy', 'precision', 'recall', 'normalized_cnf',]
     results_frame = pd.DataFrame(columns=results_cols)
 
@@ -273,47 +285,52 @@ for feature_name, feature_scales in feature_names:
     if os.path.exists(csv_file):
         results_frame = pd.read_csv(csv_file)
 
-    for feature_scale in generate_feature_scales(feature_scales):
-        print("Running feature scale: {}".format(feature_scale))
-        for test_image, train_images in cv_train_test_split_images(images):
+    # for feature_scale in generate_feature_scales(feature_scales):
+    for main_window_size in ((10, 10,),):
+        # print("Running feature scale: {}".format(feature_scale))
 
+        for test_image, train_images in cv_train_test_split_images(images):
 
             print("test im:{} train_ims:{}".format(test_image, train_images))
 
-            curr_feature_scales = tuple((fc, fc) for fc in feature_scale)
             image_name = test_image
             mask_full_path = "{base_path}/{image_name}_masked.tif".format(base_path=base_path, image_name=image_name)
             test_image_loaded = load_image(test_image)
 
             cached = True
             feature_set = FeatureSet()
-            if feature_name == "SIFT":
-                sift_clusters = sift_cluster(map(load_image, train_images))
-                for fc in feature_scale:
-                    sift = Sift(sift_clusters, windows=((fc, fc),))
+            for feature_name, feature_scale in feature_names:
+                feature_scale = tuple((fc, fc) for fc in feature_scale)
+
+                if feature_name == "SIFT":
+                    sift_clusters = sift_cluster(map(load_image, train_images))
+                    # for fc in feature_scale:
+                    sift = Sift(sift_clusters, windows=feature_scale)
                     feature_set.add(sift)
-                cached = False
-            if feature_name == "TEXTON":
-                texton_clusters = texton_cluster(map(load_image, train_images))
-                for fc in feature_scale:
-                    texton = Texton(texton_clusters, windows=((fc, fc),))
+                    cached = False
+                if feature_name == "TEXTON":
+                    texton_clusters = texton_cluster(map(load_image, train_images))
+                    # for fc in feature_scale:
+                    texton = Texton(texton_clusters, windows=feature_scale)
                     feature_set.add(texton)
-                cached = False
-            if feature_name == "PANTEX":
-                for fc in feature_scale:
-                    pantex = Pantex(windows=((fc, fc),))
+                    cached = False
+                if feature_name == "PANTEX":
+                    # for fc in feature_scale:
+                    pantex = Pantex(windows=feature_scale)
                     feature_set.add(pantex)
-            if feature_name == "LACUNARITY":
-                for fc in feature_scale:
-                    lacunarity = Lacunarity(windows=((fc, fc),))
+                if feature_name == "LACUNARITY":
+                    # for fc in feature_scale:
+                    lacunarity = Lacunarity(windows=feature_scale)
                     feature_set.add(lacunarity)
 
-            if (
-                    ((results_frame['feature_set'] == str(feature_set)) &
-                    (results_frame['test_image'] == test_image)).any()
-                ):
-                print("Skipping {}".format(str(feature_set)))
-                continue
+            feature_name = "ALL"
+            # if (
+            #         ((results_frame['feature_set'] == str(feature_set)) &
+            #         (results_frame['test_image'] == test_image)).any() &
+            #         (results_frame['main_window_size'] == test_image)).any()
+            #     ):
+            #     print("Skipping {}".format(str(feature_set)))
+            #     continue
 
             # texton = create_texton_feature(sat_image, ((25, 25), (50, 50), (100, 100)), image_name, n_clusters=n_clusters, cached=True)
 
@@ -321,7 +338,10 @@ for feature_name, feature_scales in feature_names:
             plt.close('all')
             print("Running feature set {}, image {}".format(feature_set, image_name))
             results_path = '{root}/results/jaccard/{fs}'.format(root=get_project_root(), fs=str(feature_set))
-            os.makedirs(os.path.dirname(results_path + '/'), exist_ok=True)
+            try:
+                os.makedirs(os.path.dirname(results_path + '/'), exist_ok=True)
+            except OSError:
+                pass
 
             X_test = get_x_matrix(test_image_loaded, image_name=image_name, feature_set=feature_set, window_size=main_window_size, cached=cached)
             y_test, real_mask = get_y_vector(mask_full_path, main_window_size, percentage_threshold, cached=False)
@@ -337,19 +357,32 @@ for feature_name, feature_scales in feature_names:
 
             for oversampler_name, oversampler in generate_oversamplers():
                 for classifier_name, classifier in generate_classifiers():
-                    print("Running clf: {} oversampler: {}".format(classifier_name, oversampler_name))
+                    print("Running clf: {}, oversampler: {}, scaler: {}".format(classifier_name, oversampler_name, scaler_name))
                     if oversampler is not None:
-                        X_train_resampled, y_train_resampled = oversampler.fit_sample(X_train, y_train)
+                        if scaled:
+                            robust_scaler = RobustScaler()
+                            X_train_scaled = robust_scaler.fit_transform(X_train)
+                            X_test_scaled = robust_scaler.transform(X_test)
+                            X_train_resampled, y_train_resampled = oversampler.fit_sample(X_train_scaled, y_train)
+                        else:
+                            X_train_resampled, y_train_resampled = oversampler.fit_sample(X_train, y_train)
                         classifier.fit(X_train_resampled, y_train_resampled)
                     else:
                         classifier.fit(X_train, y_train)
-                    y_pred = classifier.predict(X_test)
+
+                    if not scaled:
+                        y_pred = classifier.predict(X_test)
+                    else:
+                        y_pred = classifier.predict(X_test_scaled)
+
+
 
                     accuracy = accuracy_score(y_test, y_pred)
                     recall = recall_score(y_test, y_pred)
                     precision = precision_score(y_test, y_pred)
                     f1 = f1_score(y_test, y_pred)
                     matthews_score = matthews_corrcoef(y_test, y_pred)
+                    print("test_im: {}, train_ims:{}".format(test_image, train_images))
                     print("Oversampler {}, classifier {}".format(oversampler_name, classifier_name))
                     print("Accuracy: {}".format(accuracy))
                     print("matthews score: {}".format(matthews_score))
@@ -433,7 +466,7 @@ for feature_name, feature_scales in feature_names:
                         'feature_set': str(feature_set),
                         'test_image': test_image,
                         'train_ims': train_images,
-                        'feature_scale': curr_feature_scales,
+                        'feature_scale': None,
                         'jaccard_index': jaccard_score,
                         'jaccard_index_full_scale': jaccard_score_full_scale,
                         'accuracy': accuracy,
@@ -453,10 +486,12 @@ for feature_name, feature_scales in feature_names:
                         'test_slum_examples': y_test[y_test == 1].shape[0],
                         'main_window_size': main_window_size,
                         'current_time': current_time,
+                        'scaler': scaler_name,
+                        'scaled': scaled,
                     })
                     save_classification_results(result_information, save_path)
                     results_frame = results_frame.append(results_row, ignore_index=True)
-                    print(results_frame)
+                    # print(results_frame)
 
                     df_path = '{root}/results/jaccard'.format(root=get_project_root())
                     results_frame.to_csv('{}/{}_df_optimization.csv'.format(df_path, feature_name))

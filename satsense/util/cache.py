@@ -49,8 +49,8 @@ def cache(array, filename):
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
 
-        print("Cached: {}".format(filename))
         np.save(dir_path + '/' + filename + ".npy", array)
+        print("Cached: {}".format(filename))
     except OSError:
         print("Cannot cache - to long filename")
         pass

@@ -46,7 +46,6 @@ def lacunarity_for_chunk(chunk, box_sizes):
         # Set coordinates
         coords[i, :] = chunk[i][0:2]
 
-        # feature_vector = np.zeros(len(scales) * len(box_sizes))
         x, y, edged = chunk[i]
         for j in range(len_box_sizes):
             box_size = box_sizes[j]
@@ -75,13 +74,12 @@ class Lacunarity(Feature):
     def __call__(self, cell):
         return lacunarity_for_chunk(cell, self.box_sizes)
 
-    def initialize(self, generator: CellGenerator, scale):
-        # Load the canny edged image for the whole image
-        # This so it is not done on a window by window basis...
-        sat_image = generator.image
-        norm = sat_image.normalized
-        ce = sat_image.canny_edged
+    @property
+    def cached(self):
+        return True
 
+    @staticmethod
+    def initialize(generator: CellGenerator, scale):
         data = []
         for window in generator:
             edged, _, _ = super_cell(generator.image.canny_edged, scale, window.x_range, window.y_range, padding=True)

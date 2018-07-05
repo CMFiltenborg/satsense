@@ -7,7 +7,7 @@ from scipy import ndimage
 from skimage.filters import gabor_kernel, gaussian
 from sklearn.cluster import MiniBatchKMeans
 
-from satsense import SatelliteImage
+from ..image import SatelliteImage
 from satsense.generators import CellGenerator
 from satsense.generators.cell_generator import super_cell
 from .feature import Feature
@@ -84,11 +84,8 @@ def texton_for_chunk(chunk, kmeans, normalized=True):
         coords[i, :] = chunk[i][0:2]
 
         im_grayscale = chunk[i][2]
+        
         sub_descriptors = get_texton_descriptors(im_grayscale)
-
-        # Calculate Difference-of-Gaussian
-        dog = np.expand_dims(gaussian(im_grayscale, sigma=1) - gaussian(im_grayscale, sigma=3), axis=2)
-        sub_descriptors = np.append(sub_descriptors, dog, axis=2)
         sub_descriptors = sub_descriptors.reshape(
             (sub_descriptors.shape[0] * sub_descriptors.shape[1], sub_descriptors.shape[2]))
 
@@ -113,7 +110,6 @@ class Texton(Feature):
         self.kmeans = kmeans
         self.feature_size = len(self.windows) * kmeans.n_clusters
         self.normalized = normalized
-        self.descriptors = None
 
     def __call__(self, chunk):
         return texton_for_chunk(chunk, self.kmeans, self.normalized)
@@ -122,10 +118,15 @@ class Texton(Feature):
         normalized = "n" if self.normalized == True else "nn"
         return "Te-{}-{}".format(str(self.windows), normalized)
 
+    @property
+    def cached(self):
+        return False
+
     def chunk_size(self, cpu_cnt, im_shape):
         return im_shape[0]
 
-    def initialize(self, generator: CellGenerator, scale):
+    @staticmethod
+    def initialize(generator: CellGenerator, scale):
         im_grayscale = generator.image.grayscale
 
         data = []

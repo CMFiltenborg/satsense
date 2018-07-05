@@ -16,15 +16,16 @@ import cv2
 from satsense.performance import jaccard_index_binary_masks
 
 images = [
-    'section_1',
+    # 'section_1',
     'section_2',
-    'section_3',
+    # 'section_3',
 ]
 
 smallest_window_size = (30, 30)
 percentage_threshold = 0.5
 base_path = "/home/max/Documents/ai/scriptie/data/Clip"
-shape_file_path = "/home/max/Documents/ai/scriptie/data/Clip/slums_approved.shp"
+# shape_file_path = "/home/max/Documents/ai/scriptie/data/Clip/slums_approved.shp"
+shape_file_path = "/home/max/Documents/ai/scriptie/data/Clip/slums_approved_manual_edit.shp"
 
 for image_name in images:
     with fiona.open(shape_file_path, "r") as shapefile:
@@ -53,8 +54,8 @@ for image_name in images:
         image_name=image_name,
     )
 
-    # with rasterio.open(out_file, "w", **out_meta) as dest:
-    #     dest.write(out_image)
+    with rasterio.open(out_file, "w", **out_meta) as dest:
+        dest.write(out_image)
 
     dataset = gdal.Open(out_file, gdal.GA_ReadOnly)
     # dataset = dataset[0, :, :]
@@ -74,7 +75,7 @@ for image_name in images:
     generator = CellGenerator(image=binary_sat_image, size=smallest_window_size)
 
     result_mask = np.zeros(array.shape, dtype=np.uint8)
-    y_matrix = np.zeros(generator.shape())
+    y_matrix = np.zeros(generator.shape)
     for window in generator:
         # for name, feature in iteritems(features.items):
         y = 0

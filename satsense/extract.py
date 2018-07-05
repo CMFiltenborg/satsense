@@ -17,7 +17,6 @@ def timing(f):
     """
     Decorator to time function in minutes
     """
-
     def wrap(*args):
         time1 = time.time()
         ret = f(*args)
@@ -28,14 +27,12 @@ def timing(f):
     return wrap
 
 
-@timing
-def extract_features(features: FeatureSet, generator: CellGenerator, load_cached=True, image_name=""):
+def extract_features(features: FeatureSet, generator: CellGenerator, load_cached=True, image_name="", cpu_cnt=None):
     start = time.time()
     shape = generator.shape()
 
-    shared_feature_matrix = np.zeros((shape[0], shape[1], 1))
-    print("\n--- Calculating Feature vector: {} ---\n".format(shared_feature_matrix.shape))
-
+    shared_feature_matrix = None
+    print("\n--- Calculating Feature vector: {} ---\n".format((shape[0], shape[1])))
     for name, feature in iteritems(features.items):
         cache_key = "feature-{feature}-window{window}-image-{image_name}".format(
             image_name=image_name,
@@ -44,14 +41,14 @@ def extract_features(features: FeatureSet, generator: CellGenerator, load_cached
         )
 
         feature_matrix = None
-        if "Te-" not in str(feature):
+        if feature.cached:
             feature_matrix = load_cache(cache_key)
 
         if feature_matrix is None:
-            feature_matrix = compute_feature(feature, generator)
+            feature_matrix = compute_feature(feature, generator, cpu_cnt)
             cache(feature_matrix, cache_key)
 
-        if shared_feature_matrix:
+        if shared_feature_matrix is not None:
             shared_feature_matrix = np.append(shared_feature_matrix, feature_matrix, axis=2)
         else:
             shared_feature_matrix = feature_matrix
@@ -68,7 +65,7 @@ def extract_features(features: FeatureSet, generator: CellGenerator, load_cached
 
 
 @timing
-def compute_feature(feature, generator):
+def compute_feature(feature, generator, cpu_cnt=None):
     print("\n--- Calculating feature: {} ---\n".format(feature))
 
     start = time.time()
@@ -88,7 +85,8 @@ def compute_feature(feature, generator):
         print("Preparing data cells took {} seconds".format((end - start)))
 
         chunk_size = shape[0]
-        cpu_cnt = cpu_count()
+        if cpu_cnt is None:
+            cpu_cnt = cpu_count()
 
         # Get chunk size if feature has that function
         if hasattr(feature, 'chunk_size'):
@@ -106,11 +104,12 @@ def compute_feature(feature, generator):
         p.join()
 
         # Load individual results of processing back into one matrix
-        feature_matrix = np.zeros((shape[0], shape[1], feature.feature_size))
+        feature_length = processing_results[0][1].shape[1]
+        feature_matrix = np.zeros((shape[0], shape[1], feature_length))
         for coords, chunk_matrix in processing_results:
             load_results_into_matrix(feature_matrix, coords, chunk_matrix)
 
-        if scales_feature_matrix:
+        if scales_feature_matrix is not None:
             scales_feature_matrix = np.append(scales_feature_matrix, feature_matrix, axis=2)
         else:
             scales_feature_matrix = feature_matrix

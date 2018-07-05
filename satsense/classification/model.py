@@ -7,8 +7,6 @@ import gdal
 import numpy as np
 from imblearn.over_sampling import RandomOverSampler, SMOTE, ADASYN
 
-from satsense.extract import extract_features
-
 from satsense import SatelliteImage, extract_features
 from satsense.bands import MASK_BANDS, WORLDVIEW3
 from satsense.classification.classifiers import all_classifiers
@@ -90,13 +88,14 @@ def get_x_matrix(sat_image: SatelliteImage, image_name, feature_set, window_size
     # [M x N x Z], where 0,0,: are the features of the first block
     # In this case we have 1 feature per block
 
-    # start = time.time()
-    # calculated_features = extract_features(feature_set, generator, image_name=image_name, load_cached=cached)
-    # end = time.time()
-    # print("Elapsed time extract {}".format(end - start))
+    start = time.time()
 
     generator = CellGenerator(image=sat_image, size=window_size)
-    calculated_features = extract_features(feature_set, generator, image_name=image_name, load_cached=cached)
+    calculated_features = extract_features(feature_set, generator, load_cached=cached, image_name=image_name)
+
+    end = time.time()
+    delta = (end - start)
+    print("Calculating multiprocessing im:{} took {} seconds block size: {}, ".format(image_name, delta, window_size))
 
     if len(calculated_features.shape) == 3:
         nrows = calculated_features.shape[0] * calculated_features.shape[1]
@@ -268,7 +267,7 @@ def save_classification_results(results, save_path):
 
 def generate_feature_scales(feature_scales):
     # combi_sizes = reversed(range(1, len(feature_scales) + 1))
-    combi_sizes = (3,)
+    combi_sizes = (1,)
 
     # !yield all possible scale combinations
     for combi_size in combi_sizes:

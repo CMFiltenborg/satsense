@@ -21,18 +21,18 @@ def all_classifiers():
     ]
     return [
         # ('BalancedRandomForest', RandomForestClassifier(max_depth=None, class_weight="balanced", n_jobs=-1)),
-        ('RandomForest', RandomForestClassifier(max_depth=None, n_jobs=-1)),
-        ('GradientBoosting', gradient_booster()),
+        # ('RandomForest', RandomForestClassifier(max_depth=None, n_jobs=-1)),
+        # ('GradientBoosting', gradient_booster()),
         # ('AdaBoost', AdaBoostClassifier()),
         # ('BalancedSVM', svm.SVC(class_weight='balanced')),
-        ('SVM', svm.SVC()),
-        ('GaussianNB', GaussianNB()),
-        ('LogisticRegression', LogisticRegression(n_jobs=-1, solver='saga')),
-        ('SoftVoting', ensemble.VotingClassifier(
-            estimators=soft_voting_classifiers,
-            voting='soft',
-            n_jobs=-1)
-        ),
+        # ('SVM', svm.SVC()),
+        # ('GaussianNB', GaussianNB()),
+        # ('LogisticRegression', LogisticRegression(n_jobs=-1, solver='saga')),
+        # ('SoftVoting', ensemble.VotingClassifier(
+        #     estimators=soft_voting_classifiers,
+        #     voting='soft',
+        #     n_jobs=-1)
+        # ),
         ('HardVoting', ensemble.VotingClassifier(
             estimators=hard_voting_classifiers,
             voting='hard',
