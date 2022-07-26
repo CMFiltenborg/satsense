@@ -20,7 +20,7 @@ setup(
         'pandas',
         'descartes==1.1.0',
         'fiona==1.7.8',
-        'numpy==1.12.1',
+        'numpy==1.22.0',
         'numba',
         'opencv-python',
         'shapely==1.5.17',
